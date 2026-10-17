@@ -9,7 +9,7 @@ export default function CopyField({ value, label }) {
     <div>
       {label && <p className="mb-1 text-xs text-muted">{label}</p>}
       <div className="flex gap-2">
-        <input readOnly value={value} onFocus={(e) => e.target.select()} className="w-full rounded-md border border-line bg-panel px-3 py-2 font-mono text-xs text-ink" />
+        <input readOnly value={value} onFocus={(e) => e.target.select()} className="w-full rounded-md border border-line-strong bg-panel px-3 py-2 font-mono text-xs text-ink" />
         <button
           type="button"
           onClick={async () => {
@@ -17,7 +17,7 @@ export default function CopyField({ value, label }) {
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}
-          className="shrink-0 rounded-md border border-line px-3 text-xs hover:bg-panel-2"
+          className="shrink-0 rounded-md border border-line-strong bg-panel px-3 text-xs font-medium hover:bg-panel-2"
         >
           {copied ? "Copied" : "Copy"}
         </button>

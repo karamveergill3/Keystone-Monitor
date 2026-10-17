@@ -32,8 +32,13 @@ export default async function AdminPage() {
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-base font-semibold">Accounts</h2>
-          <a href="/ea/KeystoneSync.mq5" download className="text-sm text-accent hover:underline">Download the MT5 EA</a>
+          <a href="/ea/KeystoneSync.mq5" download className="text-sm text-accent hover:underline">Blank EA, for pasting a key by hand</a>
         </div>
+        <p className="max-w-3xl text-sm text-muted">
+          Add an account, then download its EA: the key is built in, so the terminal needs nothing typed. To set a terminal up
+          again, use <span className="font-medium text-ink">New key</span> on its row for a fresh download. The old key stops
+          working straight away.
+        </p>
         <AddAccountForm projects={projects} />
         <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
           <table className="w-full min-w-[960px] text-sm">
