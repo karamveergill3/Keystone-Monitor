@@ -1,4 +1,4 @@
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Partner Tracker";
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "Keystone Monitor";
 
 // A terminal that has not synced for this long is shown as offline. The EA
 // syncs every two minutes by default, so this is several missed syncs.

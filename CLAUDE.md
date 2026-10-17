@@ -2,7 +2,7 @@
 
 @AGENTS.md
 
-Partner Tracker: partners follow external MT5 accounts (V100, Cycle
+Keystone Monitor: partners follow external MT5 accounts (V100, Cycle
 Method). Standalone; shares nothing with any other project. `README.md` is
 the architecture reference.
 

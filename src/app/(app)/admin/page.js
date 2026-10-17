@@ -38,7 +38,7 @@ export default async function AdminPage() {
       <section className="space-y-3">
         <div className="flex items-baseline justify-between">
           <h2 className="text-base font-semibold">Accounts</h2>
-          <a href="/ea/PartnerSync.mq5" download className="text-sm text-accent hover:underline">Download the MT5 EA</a>
+          <a href="/ea/KeystoneSync.mq5" download className="text-sm text-accent hover:underline">Download the MT5 EA</a>
         </div>
         <AddAccountForm projects={projects} />
         <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">

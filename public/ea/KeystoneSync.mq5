@@ -1,8 +1,8 @@
 //+------------------------------------------------------------------+
-//|                                                 PartnerSync.mq5  |
+//|                                                 KeystoneSync.mq5 |
 //|                                                                  |
 //| READ-ONLY. Reports this account's balance, equity and deals to   |
-//| the Partner Tracker. It never opens, changes or closes a trade:  |
+//| Keystone Monitor. It never opens, changes or closes a trade:     |
 //| there is no trading code in this file at all, and a test in the  |
 //| repository fails if any is ever added.                           |
 //|                                                                  |
@@ -10,17 +10,17 @@
 //| 1. File -> Open Data Folder, then copy this file into            |
 //|    MQL5/Experts. Open it in MetaEditor and press Compile.        |
 //| 2. Tools -> Options -> Expert Advisors: tick "Allow WebRequest   |
-//|    for listed URL" and add the site's address, e.g.              |
-//|    https://partners.example.com (just the origin, no path).      |
-//| 3. Drag PartnerSync onto ONE chart of the account. Paste SyncUrl |
-//|    and SyncKey from the admin screen into its inputs.            |
+//|    for listed URL" and add the site's address, origin only:      |
+//|    https://keystone-monitor.vercel.app                           |
+//| 3. Drag KeystoneSync onto ONE chart of the account. Paste        |
+//|    SyncUrl and SyncKey from the admin screen into its inputs.    |
 //| 4. The chart's top-left corner shows the last sync result.       |
 //|                                                                  |
 //| It can run beside any trading EA: it only reads.                 |
 //+------------------------------------------------------------------+
-#property copyright   "Partner Tracker"
+#property copyright   "Keystone Monitor"
 #property version     "1.00"
-#property description "Read-only: reports balance, equity and deals to the Partner Tracker. Never trades."
+#property description "Read-only: reports balance, equity and deals to Keystone Monitor. Never trades."
 
 #define EA_VERSION          "2026.10.17"
 #define PAGE_SIZE           500
@@ -44,12 +44,12 @@ int OnInit()
   {
    if(StringFind(SyncUrl, "https://") != 0)
      {
-      Alert("PartnerSync: SyncUrl must be the https:// address from the admin screen.");
+      Alert("KeystoneSync: SyncUrl must be the https:// address from the admin screen.");
       return(INIT_PARAMETERS_INCORRECT);
      }
    if(StringFind(SyncKey, "ptk_") != 0)
      {
-      Alert("PartnerSync: SyncKey must be the key from the admin screen (it starts ptk_).");
+      Alert("KeystoneSync: SyncKey must be the key from the admin screen (it starts ptk_).");
       return(INIT_PARAMETERS_INCORRECT);
      }
    // Applied at the first sync rather than here: at terminal start-up the
@@ -89,7 +89,7 @@ void OnTradeTransaction(const MqlTradeTransaction &trans,
 // terminal never skips or mixes history.
 string WatermarkName()
   {
-   return "PartnerSync_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "_wm";
+   return "KeystoneSync_" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + "_wm";
   }
 
 // Deal times are in broker server time, which is not UTC. The difference
@@ -296,13 +296,13 @@ int SendPage(bool &more)
          g_status = "blocked: add the site to Tools -> Options -> Expert Advisors -> Allow WebRequest";
       else
          g_status = "network error " + IntegerToString(err);
-      Print("PartnerSync: ", g_status);
+      Print("KeystoneSync: ", g_status);
       return status;
      }
    if(status != 200)
      {
       g_status = "HTTP " + IntegerToString(status) + ": " + StringSubstr(text, 0, 200);
-      Print("PartnerSync: ", g_status);
+      Print("KeystoneSync: ", g_status);
       return status;
      }
 
@@ -320,7 +320,7 @@ int SendPage(bool &more)
      {
       next = 0;
       more = true;
-      Print("PartnerSync: the server asked for the whole history again.");
+      Print("KeystoneSync: the server asked for the whole history again.");
      }
 
    GlobalVariableSet(gv, (double)next);
@@ -358,6 +358,6 @@ void SyncNow()
 
 void ShowStatus()
   {
-   Comment("PartnerSync " + EA_VERSION + " (read-only)\n" + g_status);
+   Comment("KeystoneSync " + EA_VERSION + " (read-only)\n" + g_status);
   }
 //+------------------------------------------------------------------+

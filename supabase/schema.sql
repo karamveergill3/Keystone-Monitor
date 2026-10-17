@@ -1,4 +1,4 @@
--- Partner Tracker schema.
+-- Keystone Monitor schema.
 --
 -- Applied by hand in the Supabase SQL editor. Written to be re-runnable:
 -- every statement is "if not exists", "or replace", or a drop-then-create,

@@ -8,7 +8,7 @@ import { readFileSync } from "node:fs";
 import { payload } from "./fixtures.mjs";
 import { KEY_PREFIX } from "@/lib/syncKeys";
 
-const EA = readFileSync(new URL("../public/ea/PartnerSync.mq5", import.meta.url), "utf8");
+const EA = readFileSync(new URL("../public/ea/KeystoneSync.mq5", import.meta.url), "utf8");
 const code = EA.replace(/\/\/.*$/gm, "");
 
 test("the EA has no way to trade", () => {

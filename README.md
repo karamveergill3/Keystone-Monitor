@@ -1,4 +1,4 @@
-# Partner Tracker
+# Keystone Monitor
 
 A private site where business partners follow external MT5 accounts for the
 **V100** and **Cycle Method** projects: balance, equity, drawdown, P&L by
@@ -10,14 +10,14 @@ data or credentials with any other system.
 ## How it works
 
 ```
-MT5 terminal                      This site (Vercel)                 Supabase
-PartnerSync.mq5  --- HTTPS --->   /api/sync  (per-account key)  -->  accounts, deals,
-(read-only EA)                                                       equity_samples
-                                  Pages, PDFs  <-- RLS reads ------  account_daily view
-Partners (password + 2FA)  --->                                      account_positions view
+MT5 terminal                       This site (Vercel)                 Supabase
+KeystoneSync.mq5  --- HTTPS --->   /api/sync  (per-account key)  -->  accounts, deals,
+(read-only EA)                                                        equity_samples
+                                   Pages, PDFs  <-- RLS reads ------  account_daily view
+Partners (password + 2FA)  --->                                       account_positions view
 ```
 
-- **The EA only reads.** `public/ea/PartnerSync.mq5` has no trading code at
+- **The EA only reads.** `public/ea/KeystoneSync.mq5` has no trading code at
   all, and `tests/ea.test.mjs` fails if any is ever added. It posts the
   account's state and its deals every two minutes, and straight away when a
   deal lands. It runs beside any trading EA.
@@ -87,7 +87,7 @@ authenticator app. Everything else is done from the **Admin** screen.
    `MQL5/Experts`, compile it in MetaEditor.
 3. Tools -> Options -> Expert Advisors: tick **Allow WebRequest for listed
    URL** and add the site's origin (`APP_URL`).
-4. Attach PartnerSync to one chart on that account, paste the two values,
+4. Attach KeystoneSync to one chart on that account, paste the two values,
    OK. The chart's corner shows each sync's result, and the account fills in
    on the site within a couple of minutes, full history included.
 
@@ -122,7 +122,7 @@ React 19, Tailwind CSS 4, Supabase, Recharts, pdfkit.
 | `src/lib/access.js` | Sign-in, membership and two-factor checks. |
 | `src/app/(app)/admin/actions.js` | Every write the admin screen makes. |
 | `src/lib/reportPdf.js` | The PDF reports. |
-| `public/ea/PartnerSync.mq5` | The read-only MT5 EA. |
+| `public/ea/KeystoneSync.mq5` | The read-only MT5 EA. |
 
 ## Known limits
 
