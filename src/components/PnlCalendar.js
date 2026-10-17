@@ -27,7 +27,10 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
           <span />
         )}
       </div>
-      <div className="grid grid-cols-7 gap-1.5 text-xs">
+      {/* Scrolls sideways on a phone, like the tables, rather than squeezing
+          the figures. */}
+      <div className="overflow-x-auto">
+      <div className="grid min-w-[36rem] grid-cols-7 gap-1.5 text-xs">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div key={d} className="px-1.5 pb-1 font-medium text-muted">{d}</div>
         ))}
@@ -50,6 +53,7 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
             </div>
           );
         })}
+      </div>
       </div>
     </div>
   );

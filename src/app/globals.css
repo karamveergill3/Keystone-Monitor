@@ -11,6 +11,9 @@
   --color-panel: #ffffff;
   --color-panel-2: #f2ede4;
   --color-line: #e5ddd0;
+  /* Form field borders: at least 3:1 against panel and bg, so a field
+     reads as a field. */
+  --color-line-strong: #958b7c;
   --color-ink: #26221d;
   --color-muted: #665f55;
   --color-accent: #3b55a0;

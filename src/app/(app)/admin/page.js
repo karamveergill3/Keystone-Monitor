@@ -50,7 +50,7 @@ export default async function AdminPage() {
               {accounts.map((a) => {
                 const key = keys.get(a.id);
                 return (
-                  <tr key={a.id} className={`border-b border-line/70 align-top last:border-0 ${a.archived_at ? "opacity-60" : ""}`}>
+                  <tr key={a.id} className={`border-b border-line/70 align-top last:border-0 ${a.archived_at ? "bg-panel-2/60" : ""}`}>
                     <td className="px-4 py-2.5">
                       <form action={updateAccount} className="flex gap-2">
                         <input type="hidden" name="accountId" value={a.id} />

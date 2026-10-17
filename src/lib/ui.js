@@ -1,6 +1,6 @@
 // Shared class strings, so every form control looks the same.
 export const inputClass =
-  "w-full rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent-soft focus:outline-none";
+  "w-full rounded-md border border-line-strong bg-panel px-3 py-2 text-sm text-ink placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent-soft focus:outline-none";
 
 export const labelClass = "mb-1 block text-xs font-medium text-muted";
 

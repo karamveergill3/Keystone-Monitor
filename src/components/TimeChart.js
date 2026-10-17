@@ -53,6 +53,7 @@ export default function TimeChart({ points, currency = "USD", aLabel, bLabel, em
           <Tooltip
             contentStyle={{ background: "var(--color-panel)", border: "1px solid var(--color-line)", borderRadius: 6, fontSize: 13, color: "var(--color-ink)" }}
             labelStyle={{ color: "var(--color-muted)", marginBottom: 2 }}
+            itemStyle={{ color: "var(--color-ink)" }}
             cursor={{ stroke: "var(--color-line)" }}
             labelFormatter={(t) => full.format(t)}
             formatter={(v, name) => [amount(v), name === "a" ? aLabel : bLabel]}
