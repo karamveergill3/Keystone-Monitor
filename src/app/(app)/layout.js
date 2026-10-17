@@ -1,11 +1,15 @@
 import Link from "next/link";
-import { requireMember } from "@/lib/access";
+import { adminSignOut } from "@/app/(auth)/admin/login/actions";
+import { isAdmin } from "@/lib/access";
 import { listProjects } from "@/lib/data";
+import { db } from "@/lib/db";
 import { APP_NAME } from "@/lib/site";
 
+// Open to anyone with the link. The Admin link shows only once the admin
+// password has been entered in this browser; /admin itself asks for it.
 export default async function AppLayout({ children }) {
-  const { member, supabase } = await requireMember();
-  const projects = await listProjects(supabase);
+  const supabase = await db();
+  const [projects, admin] = await Promise.all([listProjects(supabase), isAdmin()]);
 
   return (
     <div className="min-h-screen">
@@ -17,14 +21,13 @@ export default async function AppLayout({ children }) {
             {projects.map((p) => (
               <Link key={p.id} href={`/projects/${p.slug}`} className="hover:text-ink">{p.name}</Link>
             ))}
-            {member.role === "admin" && <Link href="/admin" className="hover:text-ink">Admin</Link>}
+            {admin && <Link href="/admin" className="hover:text-ink">Admin</Link>}
           </nav>
-          <div className="ml-auto flex items-center gap-3 text-xs text-muted">
-            <span>{member.display_name || member.email}</span>
-            <form action="/auth/sign-out" method="post">
-              <button type="submit" className="hover:text-ink">Sign out</button>
+          {admin && (
+            <form action={adminSignOut} className="ml-auto text-xs text-muted">
+              <button type="submit" className="hover:text-ink">Leave admin</button>
             </form>
-          </div>
+          )}
         </div>
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>

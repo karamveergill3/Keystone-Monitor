@@ -1,10 +1,7 @@
-// Security headers on every response. The app is signed-in only and never
-// framed, so the policy can be strict: nothing loads from anywhere but this
-// origin and Supabase.
+// Security headers on every response. The app is never framed and the
+// browser talks to nothing but this origin (the server alone talks to
+// Supabase), so the policy can be strict.
 const isDev = process.env.NODE_ENV === "development";
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const supabaseOrigin = supabaseUrl ? new URL(supabaseUrl).origin : "";
-const supabaseWss = supabaseOrigin.replace(/^https:/, "wss:");
 
 const csp = `
   default-src 'self';
@@ -12,7 +9,7 @@ const csp = `
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data:;
   font-src 'self';
-  connect-src 'self' ${supabaseOrigin} ${supabaseWss};
+  connect-src 'self';
   object-src 'none';
   base-uri 'self';
   form-action 'self';
@@ -34,7 +31,7 @@ const nextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          // Partner figures are private: never let a shared cache keep a page.
+          // Figures change with every sync: never let a shared cache keep a page.
           { key: "Cache-Control", value: "private, no-store" },
           { key: "X-Robots-Tag", value: "noindex, nofollow" },
         ],

@@ -3,7 +3,7 @@ import { APP_NAME } from "@/lib/site";
 
 export const metadata = {
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
-  description: "Private account tracking for partners.",
+  description: "Account tracking for the V100 and Cycle Method projects.",
   robots: { index: false, follow: false },
 };
 

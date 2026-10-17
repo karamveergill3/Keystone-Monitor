@@ -8,7 +8,7 @@ import PnlCalendar from "@/components/PnlCalendar";
 import PeriodTable from "@/components/PeriodTable";
 import PositionsTable from "@/components/PositionsTable";
 import ReportForm from "@/components/ReportForm";
-import { requireMember } from "@/lib/access";
+import { db } from "@/lib/db";
 import { getAccount, listProjects, dailyFor, positionsPage, equitySamples } from "@/lib/data";
 import { accountRow } from "@/lib/accountView";
 import { summarise, dailyReturns, groupPeriods } from "@/lib/accountStats";
@@ -22,7 +22,7 @@ const VIEWS = ["calendar", "weeks", "months"];
 
 export async function generateMetadata({ params }) {
   const { id } = await params;
-  const { supabase } = await requireMember();
+  const supabase = await db();
   const account = await getAccount(supabase, id);
   return { title: account?.label ?? "Account" };
 }
@@ -30,7 +30,7 @@ export async function generateMetadata({ params }) {
 export default async function AccountPage({ params, searchParams }) {
   const { id } = await params;
   const query = await searchParams;
-  const { supabase } = await requireMember();
+  const supabase = await db();
 
   const account = await getAccount(supabase, id);
   if (!account) notFound();

@@ -4,6 +4,60 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
+## 2026-10-17 (Claude Code, Mac): Open to anyone with the link; live on Vercel
+
+### What changed
+
+- No sign-in of any kind. Every page and PDF is open to anyone with the
+  link; the site still asks search engines not to list it. Login, invites,
+  password links, two-factor, the members list, the session proxy and
+  `@supabase/ssr` are all deleted.
+- Pages read through the service role on the server (`src/lib/db.js`). The
+  schema now has no policies and refuses `anon` and `authenticated`
+  outright, so the browser cannot query Supabase at all. A re-run drops the
+  old `members` table, `is_member()` and the members-only policies.
+- `/admin` is kept for accounts and sync keys, behind one shared password,
+  `ADMIN_PASSWORD` (12+ characters). The cookie is an HMAC keyed by it, so
+  changing the password signs everyone out. Logic in `src/lib/adminAuth.js`;
+  `tests/adminActions.test.mjs` fails if an admin action stops checking it.
+- Vercel project `keystone-monitor` (Hobby) imported from `main` and live
+  at https://keystone-monitor.vercel.app, with `ADMIN_PASSWORD` set.
+- `docs/SETUP-PROMPT.md` rewritten for the open site.
+
+### Why
+
+The owner wants the site open to everyone with the link: no sign-up, no
+accounts, no two-factor. Asked how accounts and EA keys should be added
+without one, the owner asked for an admin screen; one shared password keeps
+strangers from changing them.
+
+### Watch out
+
+- The new `schema.sql` was run on the live database before this was
+  pushed (checked: no policies, no `members`, no `is_member()`, no grants
+  to the browser roles). Run it again after any change to it, as before.
+- MT5 login numbers and servers are shown publicly, by the owner's choice.
+- Vercel holds the legacy `service_role` key in `SUPABASE_SERVICE_ROLE_KEY`.
+  Swap it for the `sb_secret_` key before Supabase retires legacy keys at
+  the end of 2026. `NEXT_PUBLIC_SUPABASE_ANON_KEY` is still set on Vercel
+  but nothing uses it now. The variables are for Production and Preview;
+  `ADMIN_PASSWORD` is Production only.
+- Supabase Auth settings (sign-ups, Site URL, TOTP) no longer matter: the
+  site does not use Supabase Auth. The older entry's Auth and first-admin
+  items are obsolete.
+- The Supabase project sits in an organization shared with another
+  project, so that organization's members can open it, and it shows "Grace
+  period is over" (Free plan quota).
+
+### Still needs a human
+
+- [ ] Add the first account at `/admin`, compile the EA in MetaEditor and
+      attach it to that account's terminal.
+- [ ] Before the end of 2026: put the `sb_secret_` key in Vercel's
+      `SUPABASE_SERVICE_ROLE_KEY`, redeploy, check the site.
+- [ ] Decide whether the GitHub repository should be private.
+
+---
 ## 2026-10-17 (cloud session): Built, reviewed, database live; not yet deployed
 
 Conversation: cloud session "External account tracking project",
@@ -59,7 +113,7 @@ accounts, completely separate from every other project.
 - The EA has not been compiled yet: that needs MetaEditor on Windows (see
   `docs/NEW-MACHINE.md`).
 - `schema.sql` must stay re-runnable, and view columns may only be added
-  at the end (see the note in section 6 of the file).
+  at the end (see the note in the views section of the file).
 
 ### Still needs a human
 

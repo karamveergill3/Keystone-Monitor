@@ -1,4 +1,4 @@
-import { requireMember } from "@/lib/access";
+import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor } from "@/lib/data";
 import { reportRange, rangeSlug } from "@/lib/reportRange";
 import { projectReportModel } from "@/lib/reportModel";
@@ -8,7 +8,7 @@ import { todayKey } from "@/lib/days";
 
 export async function GET(request, { params }) {
   const { slug } = await params;
-  const { supabase } = await requireMember();
+  const supabase = await db();
   const project = (await listProjects(supabase)).find((p) => p.slug === slug);
   if (!project) return new Response("Not found\n", { status: 404 });
 

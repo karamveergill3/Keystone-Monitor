@@ -1,7 +1,7 @@
 import Link from "next/link";
 import AccountsTable from "@/components/AccountsTable";
 import CurrencyTotals from "@/components/CurrencyTotals";
-import { requireMember } from "@/lib/access";
+import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { todayKey } from "@/lib/days";
@@ -10,7 +10,7 @@ import { dayLabel } from "@/lib/format";
 export const metadata = { title: "Overview" };
 
 export default async function OverviewPage() {
-  const { supabase } = await requireMember();
+  const supabase = await db();
   const [projects, accounts] = await Promise.all([listProjects(supabase), listAccounts(supabase)]);
   const daily = await dailyFor(supabase, accounts.map((a) => a.id));
   const today = todayKey();

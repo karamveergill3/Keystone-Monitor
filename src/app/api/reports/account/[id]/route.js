@@ -1,4 +1,4 @@
-import { requireMember } from "@/lib/access";
+import { db } from "@/lib/db";
 import { getAccount, listProjects, dailyFor, positionsPage } from "@/lib/data";
 import { reportRange, rangeSlug } from "@/lib/reportRange";
 import { accountReportModel } from "@/lib/reportModel";
@@ -11,7 +11,7 @@ const TRADES_LISTED = 300;
 
 export async function GET(request, { params }) {
   const { id } = await params;
-  const { supabase } = await requireMember();
+  const supabase = await db();
   const account = await getAccount(supabase, id);
   if (!account) return new Response("Not found\n", { status: 404 });
 

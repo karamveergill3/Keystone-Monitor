@@ -15,10 +15,13 @@ the architecture reference.
 - Every figure goes through `src/lib/accountStats.js`, so screens and PDFs
   cannot disagree.
 - The EA must never trade. `tests/ea.test.mjs` enforces it; do not weaken it.
-- The service-role client (`src/lib/supabase/admin.js`) is server-only and
-  used only after `requireAdmin()` (the admin page and its actions) or a
-  sync-key check (`/api/sync`). Every other read goes through the user's own
-  client, so row-level security applies.
+- The site is public and the database is not. Every read and write goes
+  through the service-role client on the server (`src/lib/supabase/admin.js`,
+  shared per request by `src/lib/db.js`), and the
+  schema refuses the browser roles outright. Writes happen only in admin
+  actions after `requireAdmin()` (the `ADMIN_PASSWORD` check) and in
+  `/api/sync` after its key check. Anything a page renders or passes to a
+  client component is public.
 - Business logic in `src/lib/*.js` with a matching `tests/<name>.test.mjs`.
 - Double quotes, semicolons. Commit subjects are imperative sentences, no
   prefixes.
@@ -46,8 +49,8 @@ Worked on from more than one laptop and from cloud sessions.
    leave the machine they are on.
 6. **Write a handoff entry** at the top of `docs/handoff.md` when wrapping up.
 7. **There is one database.** `npm run dev` with a filled-in `.env.local`
-   reads and writes the live Supabase project, and its admin screen makes
-   links that start `http://localhost`. Make accounts, keys and invites on
-   the live site only.
+   reads and writes the live Supabase project, and its admin screen shows a
+   SyncUrl that starts `http://localhost`. Make accounts and keys on the
+   live site only.
 8. **The repository is public.** Never commit a secret, a customer's name
    or anything that names other projects.

@@ -1,31 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { safeNext, syncStatus, OFFLINE_AFTER_MS } from "@/lib/site";
-
-test("same-site paths pass through", () => {
-  assert.equal(safeNext("/accounts/abc?page=2#t"), "/accounts/abc?page=2#t");
-  assert.equal(safeNext("/"), "/");
-  assert.equal(safeNext("/set-password"), "/set-password");
-});
-
-test("anything a browser would send elsewhere falls back", () => {
-  for (const bad of [
-    "//evil.example",
-    "/\\evil.example",
-    "/\t/evil.example",
-    "/\n/evil.example",
-    "/\r/evil.example",
-    "/\t\\evil.example",
-    "https://evil.example",
-    "javascript:alert(1)",
-    "evil.example",
-    "",
-    null,
-    undefined,
-  ]) {
-    assert.equal(safeNext(bad), "/", JSON.stringify(bad));
-  }
-});
+import { syncStatus, OFFLINE_AFTER_MS } from "@/lib/site";
 
 test("sync status", () => {
   const now = Date.parse("2026-10-17T12:00:00Z");

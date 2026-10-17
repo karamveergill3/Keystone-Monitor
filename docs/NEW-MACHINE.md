@@ -6,7 +6,7 @@ Everything lives in places any computer can reach:
 |---|---|
 | The code | GitHub: `karamveergill3/Keystone-Monitor` |
 | The site | Vercel project `keystone-monitor`, in the Vercel account `karamveergill3`. Check `docs/handoff.md` for whether it has been created yet: until it is, nothing deploys and there is no live site. |
-| Data, sign-ins and settings | Supabase project ID `avsfygkauoipytiqraau`, named "Keystone Monitor". Go by the ID: https://supabase.com/dashboard/project/avsfygkauoipytiqraau |
+| Data | Supabase project ID `avsfygkauoipytiqraau`, named "Keystone Monitor". Go by the ID: https://supabase.com/dashboard/project/avsfygkauoipytiqraau |
 
 Nothing is copied between laptops except one secret in step 6, which is
 fetched fresh on each machine.
@@ -205,8 +205,7 @@ Copy the template if there is no `.env.local` yet
 on Windows, `[ -f .env.local ] || cp .env.local.example .env.local` on Mac)
 and fill in:
 
-- `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`: already
-  filled in. They are public by design.
+- `NEXT_PUBLIC_SUPABASE_URL`: already filled in.
 - `SUPABASE_SERVICE_ROLE_KEY`: the project's **secret** key. Open
   https://supabase.com/dashboard/project/avsfygkauoipytiqraau, then Project
   Settings, API Keys, the "Publishable and secret API keys" tab, Secret
@@ -215,18 +214,19 @@ and fill in:
   (`vercel env pull` cannot fetch it: Vercel returns `[SENSITIVE]` for
   variables stored as Sensitive.)
 - `APP_URL=http://localhost:3000`
+- `ADMIN_PASSWORD`: any password of 12 or more characters, for `/admin` on
+  your own machine. It does not have to match the one in Vercel.
 
 Then `npm run dev` and open http://localhost:3000.
 
 **Careful: there is only one database.** A local copy of the site reads and
-writes the same Supabase project as the live one. Invites, new accounts,
-archiving and key rotation made locally are real. And the links the local
-admin screen shows are built from `APP_URL`, so they start
-`http://localhost:3000`: partners cannot open those invite and password
-links, and the EA refuses that SyncUrl because it only accepts `https://`.
-**Add accounts, make keys and invite people on the live site only.** If you
-did make a key locally, the key itself is valid: paste it into the EA with
-the live SyncUrl (the live address followed by `/api/sync`).
+writes the same Supabase project as the live one. New accounts, archiving
+and key rotation made locally are real. And the SyncUrl the local admin
+screen shows is built from `APP_URL`, so it starts `http://localhost:3000`,
+which the EA refuses because it only accepts `https://`. **Add accounts and
+make keys on the live site only.** If you did make a key locally, the key
+itself is valid: paste it into the EA with the live SyncUrl (the live
+address followed by `/api/sync`).
 
 ### 7. Claude on this laptop
 

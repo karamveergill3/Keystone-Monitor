@@ -1,5 +1,5 @@
-// The reads every screen and report makes, through the signed-in user's
-// own client so row-level security applies to all of them.
+// The reads every screen and report makes, through the server's client
+// from src/lib/db.js. Whatever these return can end up on a public page.
 
 import { cache } from "react";
 import { fetchAllPages } from "./fetchAllPages.js";

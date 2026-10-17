@@ -1,6 +1,6 @@
 // Runs supabase/schema.sql against a real Postgres (PGlite, in process),
-// with just enough of Supabase's auth schema stubbed in to exercise the
-// row-level security and the two views.
+// with just enough of Supabase's roles and auth schema stubbed in to
+// exercise the row-level security and the two views.
 
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -9,22 +9,22 @@ import { PGlite } from "@electric-sql/pglite";
 
 const SCHEMA = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
 
-const ADMIN = "00000000-0000-0000-0000-000000000001";
-const STRANGER = "00000000-0000-0000-0000-000000000002";
+const VISITOR = "00000000-0000-0000-0000-000000000001";
 
 // What Supabase provides before any project SQL runs.
 const SUPABASE_STUB = `
   create role anon nologin;
   create role authenticated nologin;
+  create role service_role nologin bypassrls;
   create schema auth;
   create table auth.users (id uuid primary key);
   create function auth.jwt() returns jsonb language sql stable as
     $$ select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb $$;
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(auth.jwt() ->> 'sub', '')::uuid $$;
-  grant usage on schema public, auth to anon, authenticated;
-  grant execute on all functions in schema auth to anon, authenticated;
-  alter default privileges in schema public grant all on tables to anon, authenticated;
+  grant usage on schema public, auth to anon, authenticated, service_role;
+  grant execute on all functions in schema auth to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 `;
 
 let db;
@@ -37,8 +37,7 @@ before(async () => {
   await db.exec(SCHEMA);
 
   await db.exec(`
-    insert into auth.users (id) values ('${ADMIN}'), ('${STRANGER}');
-    insert into public.members (user_id, email, role) values ('${ADMIN}', 'a@example.com', 'admin');
+    insert into auth.users (id) values ('${VISITOR}');
     insert into public.accounts (id, project_id, label, balance)
       select '10000000-0000-0000-0000-000000000001', id, 'V100 #1', 10049.1 from public.projects where slug = 'v100';
     insert into public.account_keys (account_id, key_hash, key_hint)
@@ -56,17 +55,31 @@ after(async () => {
   await db?.close();
 });
 
-async function as(userId, aal, sql) {
+// Runs sql as Supabase would for a browser: signed in as userId, or with
+// the anon key alone when there is no user.
+async function as(userId, sql) {
   await db.exec("reset role");
-  const claims = userId ? JSON.stringify({ sub: userId, aal, role: "authenticated" }) : "";
+  const claims = userId ? JSON.stringify({ sub: userId, aal: "aal1", role: "authenticated" }) : "";
   await db.query("select set_config('request.jwt.claims', $1, false)", [claims]);
-  await db.exec("set role authenticated");
+  await db.exec(userId ? "set role authenticated" : "set role anon");
   try {
     return await db.query(sql);
   } finally {
     await db.exec("reset role");
   }
 }
+
+// Runs sql as the site's server does, with the service role.
+async function asServer(sql) {
+  await db.exec("set role service_role");
+  try {
+    return await db.query(sql);
+  } finally {
+    await db.exec("reset role");
+  }
+}
+
+const READABLE = ["accounts", "deals", "equity_samples", "account_daily", "account_positions", "projects"];
 
 test("both projects are seeded once", async () => {
   const { rows } = await db.query("select slug from public.projects order by sort");
@@ -142,35 +155,35 @@ test("a netting reversal splits into the part closed and the part opened", async
   assert.equal(lots.rows[0].lots, 2);
 });
 
-test("a member with two-factor reads everything", async () => {
-  for (const table of ["accounts", "deals", "account_daily", "account_positions", "projects"]) {
+test("the server reads and writes everything, sync keys included", async () => {
+  await asServer(`
+    insert into public.equity_samples (account_id, at, balance, equity)
+      values ('10000000-0000-0000-0000-000000000001', '2026-07-02 00:15Z', 10549.1, 10549.1)
+  `);
+  for (const table of [...READABLE, "account_keys"]) {
     const all = (await db.query(`select count(*)::int as n from public.${table}`)).rows[0].n;
-    const seen = await as(ADMIN, "aal2", `select * from public.${table}`);
     assert.ok(all > 0, table);
-    assert.equal(seen.rows.length, all, table);
+    assert.equal((await asServer(`select * from public.${table}`)).rows.length, all, table);
+  }
+  const upd = await asServer("update public.account_keys set key_hint = 'abcd' returning account_id");
+  assert.equal(upd.rows.length, 1);
+});
+
+test("a browser reads nothing, signed in or not", async () => {
+  for (const table of [...READABLE, "account_keys"]) {
+    await assert.rejects(as(VISITOR, `select * from public.${table}`), /permission denied/, `signed in: ${table}`);
+    await assert.rejects(as(null, `select * from public.${table}`), /permission denied/, `anon: ${table}`);
   }
 });
 
-test("a password alone reads nothing but its own member row", async () => {
-  assert.equal((await as(ADMIN, "aal1", "select id from public.accounts")).rows.length, 0);
-  assert.equal((await as(ADMIN, "aal1", "select * from public.account_daily")).rows.length, 0);
-  const me = await as(ADMIN, "aal1", "select role from public.members");
-  assert.deepEqual(me.rows, [{ role: "admin" }]);
-});
-
-test("a signed-in stranger reads nothing", async () => {
-  assert.equal((await as(STRANGER, "aal2", "select id from public.accounts")).rows.length, 0);
-  assert.equal((await as(STRANGER, "aal2", "select * from public.members")).rows.length, 0);
-});
-
-test("nobody signed in can write, and sync keys are never readable", async () => {
-  await assert.rejects(as(ADMIN, "aal2", "select key_hash from public.account_keys"), /permission denied/);
-  await assert.rejects(
-    as(ADMIN, "aal2", "insert into public.members (user_id, email, role) values ('" + STRANGER + "', 'x', 'admin')"),
-    /row-level security/
-  );
-  const upd = await as(ADMIN, "aal2", "update public.accounts set label = 'hacked' returning id");
-  assert.equal(upd.rows.length, 0);
+test("a browser writes nothing", async () => {
+  for (const userId of [VISITOR, null]) {
+    await assert.rejects(as(userId, "update public.accounts set label = 'hacked'"), /permission denied/);
+    await assert.rejects(
+      as(userId, "insert into public.account_keys (account_id, key_hash, key_hint) values ('10000000-0000-0000-0000-000000000001', 'x', 'x')"),
+      /permission denied/
+    );
+  }
 });
 
 test("every table has row-level security on", async () => {
@@ -178,4 +191,41 @@ test("every table has row-level security on", async () => {
     "select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity"
   );
   assert.deepEqual(rows, []);
+});
+
+test("no table has a policy, so RLS lets no browser role through", async () => {
+  const { rows } = await db.query("select tablename, policyname from pg_policies where schemaname = 'public'");
+  assert.deepEqual(rows, []);
+});
+
+// The live database was first set up for signed-in partners. A re-run must
+// leave it exactly like a fresh one: no members table, no is_member(), no
+// policies, and the browser roles still refused.
+test("a re-run clears what an older, sign-in database still has", async () => {
+  await db.exec(`
+    create table public.members (user_id uuid primary key references auth.users (id) on delete cascade, email text not null);
+    alter table public.members enable row level security;
+    create function public.is_member() returns boolean language sql stable security definer set search_path = '' as
+      $$ select exists (select 1 from public.members m where m.user_id = auth.uid()) and coalesce(auth.jwt() ->> 'aal', '') = 'aal2'; $$;
+    create policy "members read own row or all when verified" on public.members for select to authenticated
+      using (user_id = auth.uid() or public.is_member());
+    create policy "members read projects" on public.projects for select to authenticated using (public.is_member());
+    create policy "members read accounts" on public.accounts for select to authenticated using (public.is_member());
+    create policy "members read deals" on public.deals for select to authenticated using (public.is_member());
+    create policy "members read equity samples" on public.equity_samples for select to authenticated using (public.is_member());
+    grant select on public.projects, public.accounts, public.deals, public.equity_samples,
+      public.account_daily, public.account_positions to authenticated;
+    insert into public.members (user_id, email) values ('${VISITOR}', 'v@example.com');
+  `);
+
+  await db.exec(SCHEMA);
+
+  const leftovers = await db.query(
+    "select to_regclass('public.members') as members, to_regprocedure('public.is_member()') as is_member, (select count(*)::int from pg_policies where schemaname = 'public') as policies"
+  );
+  assert.deepEqual(leftovers.rows, [{ members: null, is_member: null, policies: 0 }]);
+  for (const table of READABLE) {
+    await assert.rejects(as(VISITOR, `select * from public.${table}`), /permission denied/, table);
+  }
+  assert.ok((await asServer("select id from public.accounts")).rows.length > 0);
 });

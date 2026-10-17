@@ -1,8 +1,9 @@
 # Keystone Monitor
 
-A private site where business partners follow external MT5 accounts for the
+A site where business partners follow external MT5 accounts for the
 **V100** and **Cycle Method** projects: balance, equity, drawdown, P&L by
 day, week and month, every closed trade, and PDF reports for any date range.
+Anyone with the link can see it; only the admin screen asks for a password.
 
 It is a standalone app with its own database and hosting. It shares no code,
 data or credentials with any other system.
@@ -13,8 +14,8 @@ data or credentials with any other system.
 MT5 terminal                       This site (Vercel)                 Supabase
 KeystoneSync.mq5  --- HTTPS --->   /api/sync  (per-account key)  -->  accounts, deals,
 (read-only EA)                                                        equity_samples
-                                   Pages, PDFs  <-- RLS reads ------  account_daily view
-Partners (password + 2FA)  --->                                       account_positions view
+                                   Pages, PDFs  <-- server reads ---  account_daily view
+Anyone with the link       --->                                       account_positions view
 ```
 
 - **The EA only reads.** `public/ea/KeystoneSync.mq5` has no trading code at
@@ -26,14 +27,15 @@ Partners (password + 2FA)  --->                                       account_po
   same key from a different login is refused.
 - **Every deal is stored**, deposits and withdrawals included, so trading
   P&L and money moved in or out are always told apart.
-- **Partners need a password and an authenticator code.** Row-level
-  security enforces it in the database too: a session without two-factor
-  reads nothing. Nobody writes through the browser; every write goes
-  through the service role after a server-side admin check.
-- **Invite only, no email needed.** The admin screen makes invite and
-  password-reset links to send directly (WhatsApp, Telegram, anything).
-  Opening a link only shows a Continue button, so a messenger fetching it
-  for a preview does not use it up.
+- **The site is open; the database is not.** There is no sign-in and no
+  sign-up: anyone with the link sees every account, figure and report. The
+  server reads with the service role, and the database refuses the browser
+  roles outright, so nobody can query it directly or see more than the
+  pages show. The site asks search engines not to list it.
+- **One admin password.** `/admin` asks for `ADMIN_PASSWORD`, set in
+  Vercel, at least 12 characters. There are no admin accounts. Every write
+  goes through the service role after that check, or after `/api/sync`'s
+  key check.
 
 ## What the figures mean
 
@@ -62,33 +64,25 @@ project. What is still pending for it is in `docs/handoff.md`, and
 1. Create a new project.
 2. SQL Editor: paste and run `supabase/schema.sql`. It is re-runnable; run it
    again after any change to it.
-3. Authentication -> Sign In / Providers -> Email: **turn off "Allow new users
-   to sign up"**. Accounts are made only by invitation.
-4. Authentication -> Multi-Factor: TOTP should be enabled (it is by
-   default).
-5. Authentication -> URL Configuration: set Site URL to the site's address.
+
+Supabase Auth is not used, so nothing under Authentication needs setting.
 
 ### 2. Vercel
 
 1. Import this repository as a new project.
-2. Set the variables in `.env.local.example`: the Supabase URL, the
-   publishable key (in `NEXT_PUBLIC_SUPABASE_ANON_KEY`), the secret key (in
-   `SUPABASE_SERVICE_ROLE_KEY`), and `APP_URL`. Both keys are under Project
-   Settings, API Keys, "Publishable and secret API keys"; the legacy
-   `anon`/`service_role` keys also work until Supabase retires them at the
-   end of 2026.
+2. Set the variables in `.env.local.example`: the Supabase URL, the secret
+   key (in `SUPABASE_SERVICE_ROLE_KEY`; Project Settings, API Keys,
+   "Publishable and secret API keys"; the legacy `service_role` key also
+   works until Supabase retires it at the end of 2026), `APP_URL` and
+   `ADMIN_PASSWORD`. Mark the secret key and `ADMIN_PASSWORD` Sensitive, and
+   make the password long and random: it is the only thing guarding
+   `/admin`.
 3. Deploy, and add your domain if you have one.
 
-### 3. The first admin
+### 3. The admin screen
 
-```bash
-npm ci
-cp .env.local.example .env.local   # fill in the same values as on Vercel
-node --env-file=.env.local scripts/create-admin.mjs you@example.com "Your Name"
-```
-
-Open the printed link, choose a password, scan the QR code with an
-authenticator app. Everything else is done from the **Admin** screen.
+Open `/admin` and enter `ADMIN_PASSWORD`. To change the password, change it
+in Vercel and redeploy; every browser is signed out of admin.
 
 ### 4. Adding an account
 
@@ -106,11 +100,10 @@ A lost key: **New key** on the admin screen, then paste it into the EA. A
 gap in history: **Resync history** makes the EA send everything again;
 nothing is duplicated.
 
-### 5. Inviting partners
+### 5. Sharing the site
 
-Admin -> Partners: email, name, role -> **Create invite link**, and send the
-link. Partners see everything; admins can also add accounts and invite
-people. Lost phone: **Reset 2FA**. Forgotten password: **Password link**.
+Send the link. Anyone who has it sees everything; there is nothing to set
+up for them.
 
 ## Development
 
@@ -133,7 +126,8 @@ React 19, Tailwind CSS 4, Supabase, Recharts, pdfkit.
 | `supabase/schema.sql` | Tables, RLS, views. Applied by hand. |
 | `src/app/api/sync/route.js` | The EA's endpoint. Logic in `src/lib/syncIngest.js`. |
 | `src/lib/accountStats.js` | Every figure, for screens and PDFs alike. |
-| `src/lib/access.js` | Sign-in, membership and two-factor checks. |
+| `src/lib/db.js` | The server's database client, for every page and report. |
+| `src/lib/access.js` | The admin password check (`src/lib/adminAuth.js`). |
 | `src/app/(app)/admin/actions.js` | Every write the admin screen makes. |
 | `src/lib/reportPdf.js` | The PDF reports. |
 | `public/ea/KeystoneSync.mq5` | The read-only MT5 EA. |

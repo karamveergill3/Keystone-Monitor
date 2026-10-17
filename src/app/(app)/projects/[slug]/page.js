@@ -3,7 +3,7 @@ import AccountsTable from "@/components/AccountsTable";
 import CurrencyTotals from "@/components/CurrencyTotals";
 import MonthlyMatrix from "@/components/MonthlyMatrix";
 import ReportForm from "@/components/ReportForm";
-import { requireMember } from "@/lib/access";
+import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { groupPeriods } from "@/lib/accountStats";
@@ -13,14 +13,14 @@ const MONTHS_SHOWN = 6;
 
 export async function generateMetadata({ params }) {
   const { slug } = await params;
-  const { supabase } = await requireMember();
+  const supabase = await db();
   const project = (await listProjects(supabase)).find((p) => p.slug === slug);
   return { title: project?.name ?? "Project" };
 }
 
 export default async function ProjectPage({ params }) {
   const { slug } = await params;
-  const { supabase } = await requireMember();
+  const supabase = await db();
   const project = (await listProjects(supabase)).find((p) => p.slug === slug);
   if (!project) notFound();
 

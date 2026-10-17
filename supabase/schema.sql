@@ -5,53 +5,18 @@
 -- so running the whole file again after a change is always safe.
 --
 -- WHO CAN DO WHAT
---   * Partners (rows in public.members) can READ everything below, and only
---     after passing two-factor (an aal2 session). RLS enforces both, so a
---     stolen password alone reads nothing.
---   * Nobody writes through the browser. Every write goes through the
---     service role, in a route handler or server action that has already
---     checked who is asking. There are deliberately no insert, update or
---     delete policies.
---   * Sync keys live in their own table with RLS on and no policies at all,
---     so not even a partner can read their hashes.
+--   * The site is open to anyone with its link, but the database is not:
+--     every table has RLS on and no policies, and the browser roles (anon,
+--     authenticated) are refused outright. Only the site's server reads,
+--     with the service role, so a visitor sees what the pages render and
+--     nothing else.
+--   * Every write goes through the service role too: /api/sync after it
+--     has checked the terminal's key, and the admin screen's actions after
+--     they have checked the admin password.
+--   * Sync keys are stored only as SHA-256 hashes, in their own table.
 
 -- ---------------------------------------------------------------------------
--- 1. Members: who may sign in, and whether they can administer.
--- ---------------------------------------------------------------------------
-create table if not exists public.members (
-  user_id      uuid primary key references auth.users (id) on delete cascade,
-  email        text not null,
-  display_name text,
-  role         text not null default 'partner' check (role in ('admin', 'partner')),
-  created_at   timestamptz not null default now()
-);
-
-alter table public.members enable row level security;
-
--- True for a member with a two-factor session. SECURITY DEFINER so the
--- policies below can call it without recursing into members' own policy.
-create or replace function public.is_member()
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select exists (select 1 from public.members m where m.user_id = auth.uid())
-     and coalesce(auth.jwt() ->> 'aal', '') = 'aal2';
-$$;
-
-revoke all on function public.is_member() from public;
-grant execute on function public.is_member() to authenticated;
-
-drop policy if exists "members read own row or all when verified" on public.members;
-create policy "members read own row or all when verified"
-  on public.members for select
-  to authenticated
-  using (user_id = auth.uid() or public.is_member());
-
--- ---------------------------------------------------------------------------
--- 2. Projects: V100 and Cycle Method. Adding a third is one insert.
+-- 1. Projects: V100 and Cycle Method. Adding a third is one insert.
 -- ---------------------------------------------------------------------------
 create table if not exists public.projects (
   id         uuid primary key default gen_random_uuid(),
@@ -63,11 +28,9 @@ create table if not exists public.projects (
 
 alter table public.projects enable row level security;
 
+-- No policies: only the server reads this. The drop removes the
+-- members-only policy an older database still has.
 drop policy if exists "members read projects" on public.projects;
-create policy "members read projects"
-  on public.projects for select
-  to authenticated
-  using (public.is_member());
 
 insert into public.projects (slug, name, sort) values
   ('v100', 'V100', 1),
@@ -75,7 +38,7 @@ insert into public.projects (slug, name, sort) values
 on conflict (slug) do nothing;
 
 -- ---------------------------------------------------------------------------
--- 3. Accounts: one row per external MT5 account.
+-- 2. Accounts: one row per external MT5 account.
 --
 -- account_number and server are blank until the EA's first sync, which
 -- binds the row to that login. A later sync from a different login with
@@ -123,11 +86,8 @@ alter table public.accounts enable row level security;
 
 create index if not exists accounts_project_idx on public.accounts (project_id);
 
+-- No policies (see projects above).
 drop policy if exists "members read accounts" on public.accounts;
-create policy "members read accounts"
-  on public.accounts for select
-  to authenticated
-  using (public.is_member());
 
 -- Sync keys. Only the SHA-256 of a key is stored; the key itself is shown
 -- once, when it is made. No policies: service role only.
@@ -141,7 +101,7 @@ create table if not exists public.account_keys (
 alter table public.account_keys enable row level security;
 
 -- ---------------------------------------------------------------------------
--- 4. Deals: every deal the terminal has, trades and balance operations.
+-- 3. Deals: every deal the terminal has, trades and balance operations.
 --
 -- kind is decided at ingest (src/lib/dealKinds.js):
 --   trade  buys and sells             counts as trading P&L
@@ -177,14 +137,11 @@ alter table public.deals enable row level security;
 create index if not exists deals_account_time_idx on public.deals (account_id, time);
 create index if not exists deals_account_position_idx on public.deals (account_id, position_id);
 
+-- No policies (see projects above).
 drop policy if exists "members read deals" on public.deals;
-create policy "members read deals"
-  on public.deals for select
-  to authenticated
-  using (public.is_member());
 
 -- ---------------------------------------------------------------------------
--- 5. Equity samples: one every 15 minutes per account, for the chart.
+-- 4. Equity samples: one every 15 minutes per account, for the chart.
 -- ---------------------------------------------------------------------------
 create table if not exists public.equity_samples (
   account_id uuid not null references public.accounts (id) on delete cascade,
@@ -196,14 +153,11 @@ create table if not exists public.equity_samples (
 
 alter table public.equity_samples enable row level security;
 
+-- No policies (see projects above).
 drop policy if exists "members read equity samples" on public.equity_samples;
-create policy "members read equity samples"
-  on public.equity_samples for select
-  to authenticated
-  using (public.is_member());
 
 -- ---------------------------------------------------------------------------
--- 6. Views. security_invoker, so the RLS above applies to whoever reads them.
+-- 5. Views. security_invoker, so the RLS above applies to whoever reads them.
 --
 -- Days are London days. Keep LONDON in src/lib/days.js in step if this ever
 -- changes.
@@ -318,9 +272,16 @@ from money m
 full outer join record r on r.account_id = m.account_id and r.day = m.day;
 
 -- ---------------------------------------------------------------------------
--- 7. The browser never needs the anon role for any of this.
+-- 6. The browser roles get nothing. Only the server's service role reads.
 -- ---------------------------------------------------------------------------
-revoke all on public.members, public.projects, public.accounts, public.account_keys,
+revoke all on public.projects, public.accounts, public.account_keys,
   public.deals, public.equity_samples, public.account_daily, public.account_positions
-  from anon;
-revoke all on public.account_keys from authenticated;
+  from anon, authenticated;
+
+-- ---------------------------------------------------------------------------
+-- 7. Left over from when partners signed in: who could sign in, never any
+-- account data. A fresh database never has them; a re-run removes them
+-- from an older one. The policies that used is_member() are dropped above.
+-- ---------------------------------------------------------------------------
+drop table if exists public.members;
+drop function if exists public.is_member();

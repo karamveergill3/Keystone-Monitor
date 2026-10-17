@@ -3,8 +3,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { ingestSync } from "@/lib/syncIngest";
 import { MAX_BODY_BYTES } from "@/lib/syncPayload";
 
-// The MT5 EA posts here. Authenticated by the account's own sync key, never
-// by a session, so proxy.js leaves this path alone.
+// The MT5 EA posts here. Authenticated by the account's own sync key; the
+// site has no sessions.
 export async function POST(request) {
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > MAX_BODY_BYTES) {
