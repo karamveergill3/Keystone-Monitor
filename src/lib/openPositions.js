@@ -35,7 +35,7 @@ export function eaReportsOpen(version) {
 // One of:
 //   waiting     the EA has never synced
 //   current     rows is the last sync's list (reported is the terminal's
-//               own count, which can be higher: the EA sends at most 200)
+//               own count, which can be higher: the EA sends at most 500)
 //   none        nothing open at the last sync
 //   unreported  positions are open, but the last sync came from an EA that
 //               does not list them

@@ -3,7 +3,7 @@
 export function payload(overrides = {}) {
   return {
     v: 1,
-    ea: "2026.10.17.2",
+    ea: "2026.10.17.3",
     account: {
       login: "51234567",
       server: "Broker-Live",

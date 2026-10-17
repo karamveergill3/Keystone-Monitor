@@ -18,7 +18,7 @@ machines. Keep the four headings.
   WebRequest address with a Copy button. Nothing is typed at the terminal.
 - `next.config.mjs` turns off Turbopack's on-disk build cache: Vercel
   restored it and the first restyle deploy kept the old stylesheet.
-- The EA (2026.10.17.2) now sends every open position, up to 200, on each
+- The EA (2026.10.17.3) now sends every open position, up to 500, on each
   sync: ticket, symbol, side, lots, open and current price, SL, TP, swap,
   profit, open time (UTC, same offset as deals), magic and comment.
   `BuildOpen()` only reads; `tests/ea.test.mjs` still forbids any trading

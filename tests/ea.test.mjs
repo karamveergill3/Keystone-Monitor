@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { payload } from "./fixtures.mjs";
 import { KEY_PREFIX } from "@/lib/syncKeys";
+import { MAX_OPEN_PER_SYNC } from "@/lib/syncPayload";
 import { eaReportsOpen } from "@/lib/openPositions";
 
 const EA = readFileSync(new URL("../public/ea/KeystoneSync.mq5", import.meta.url), "utf8");
@@ -71,6 +72,8 @@ test("the EA's version is one the account page knows lists open positions", () =
 
 test("the EA sends its open positions, capped, in every page", () => {
   assert.match(code, /#define MAX_OPEN\s+\d+/);
+  // Never more than the server takes, or a big grid would refuse the sync.
+  assert.ok(Number(code.match(/#define MAX_OPEN\s+(\d+)/)[1]) <= MAX_OPEN_PER_SYNC);
   assert.match(code, /string BuildOpen\(\)/);
   assert.match(code, /",\\"open\\":" \+ BuildOpen\(\)/);
   // Open times are converted to UTC the same way deal times are.

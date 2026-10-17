@@ -22,16 +22,16 @@
 #property version     "1.00"
 #property description "Read-only: reports balance, equity, open positions and deals to Keystone Monitor. Never trades."
 
-#define EA_VERSION          "2026.10.17.2"
+#define EA_VERSION          "2026.10.17.3"
 #define PAGE_SIZE           500
 #define MAX_PAGES_PER_TICK  20
 #define TICK_SECONDS        5
 #define HTTP_TIMEOUT_MS     10000
-#define MAX_OPEN            200
+#define MAX_OPEN            500
 
 input string SyncUrl    = "";    // SyncUrl from the admin screen
 input string SyncKey    = "";    // SyncKey from the admin screen (shown once)
-input bool   FullResync = false; // Send the whole history again, once
+input bool   FullResync = false; // Resend all history (switch off after)
 
 // How often to sync when nothing is happening. The server sends its own
 // value back on every reply and this follows it.
@@ -77,7 +77,11 @@ void OnDeinit(const int reason)
 void OnTimer()
   {
    if(!TerminalInfoInteger(TERMINAL_CONNECTED))
+     {
+      g_status = "waiting for the terminal to connect";
+      ShowStatus();
       return;
+     }
    if(g_pending || TimeLocal() - g_lastAttempt >= g_interval)
       SyncNow();
   }
@@ -290,12 +294,17 @@ int ReplyInt(string reply, string field, int fallback)
    return (int)StringToInteger(StringSubstr(reply, at + StringLen(field) + 3, 6));
   }
 
-// Sends one page. Returns the HTTP status (or -1).
+// Sends one page. Returns the HTTP status, -1 for a network error, -2 for
+// a 200 that was not the sync endpoint's ok, or -3 before the account has
+// logged in.
 int SendPage(bool &more)
   {
    more = false;
    if(AccountInfoInteger(ACCOUNT_LOGIN) <= 0)
-      return -1;
+     {
+      g_status = "waiting for the account to log in";
+      return -3;
+     }
 
    string gv = WatermarkName();
    if(g_resetOnce)
@@ -397,8 +406,9 @@ void SyncNow()
       int status = SendPage(more);
       if(status != 200)
         {
-         // Wait for the next interval rather than retrying every tick.
-         g_pending = false;
+         // Not logged in yet: try again at the next tick. Anything else
+         // waits for the next interval rather than retrying every tick.
+         g_pending = (status == -3);
          ShowStatus();
          return;
         }
