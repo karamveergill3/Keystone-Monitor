@@ -2,6 +2,7 @@ import Link from "next/link";
 import AddAccountForm from "@/components/AddAccountForm";
 import RotateKeyForm from "@/components/RotateKeyForm";
 import ConfirmButton from "@/components/ConfirmButton";
+import EaCodeBox from "@/components/EaCodeBox";
 import StatusDot from "@/components/StatusDot";
 import { requireAdmin } from "@/lib/access";
 import { listProjects, listAccounts } from "@/lib/data";
@@ -40,6 +41,7 @@ export default async function AdminPage() {
           working straight away.
         </p>
         <AddAccountForm projects={projects} />
+        <EaCodeBox />
         <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
           <table className="w-full min-w-[960px] text-sm">
             <thead className="bg-panel-2/70 text-left text-xs text-muted">

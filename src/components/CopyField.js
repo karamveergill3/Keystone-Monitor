@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { copyText } from "@/components/copyText";
 
 // A read-only value with a copy button, for keys and links shown once.
 export default function CopyField({ value, label }) {
@@ -13,7 +14,7 @@ export default function CopyField({ value, label }) {
         <button
           type="button"
           onClick={async () => {
-            await navigator.clipboard.writeText(value);
+            if (!(await copyText(value))) return;
             setCopied(true);
             setTimeout(() => setCopied(false), 1500);
           }}

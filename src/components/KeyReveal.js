@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import CopyField from "@/components/CopyField";
+import { copyText } from "@/components/copyText";
 import { EA_PATH, canPersonalise, personaliseEa, eaFileName } from "@/lib/eaFile";
 import { buttonClass } from "@/lib/ui";
 
@@ -10,17 +11,33 @@ import { buttonClass } from "@/lib/ui";
 export default function KeyReveal({ state }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
   if (!state?.ok || !state.key) return null;
 
   const origin = new URL(state.syncUrl).origin;
   const ready = canPersonalise(state.syncUrl, state.key);
 
+  async function personalised() {
+    const res = await fetch(EA_PATH, { cache: "no-store" });
+    if (!res.ok) throw new Error(`the EA could not be fetched (${res.status})`);
+    return personaliseEa(await res.text(), { syncUrl: state.syncUrl, syncKey: state.key });
+  }
+
+  async function copyCode() {
+    setError("");
+    try {
+      if (!(await copyText(await personalised()))) throw new Error("This browser would not copy");
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      setError(`${err.message.replace(/\.$/, "")}. Use the download, or the two values under "Setting it up by hand".`);
+    }
+  }
+
   async function download() {
     setError("");
     try {
-      const res = await fetch(EA_PATH, { cache: "no-store" });
-      if (!res.ok) throw new Error(`the EA could not be fetched (${res.status})`);
-      const text = personaliseEa(await res.text(), { syncUrl: state.syncUrl, syncKey: state.key });
+      const text = await personalised();
       const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
       const a = document.createElement("a");
       a.href = url;
@@ -29,7 +46,7 @@ export default function KeyReveal({ state }) {
       URL.revokeObjectURL(url);
       setSaved(true);
     } catch (err) {
-      setError(`${err.message}. Use the two values under "Setting it up by hand" instead.`);
+      setError(`${err.message.replace(/\.$/, "")}. Use the two values under "Setting it up by hand" instead.`);
     }
   }
 
@@ -44,11 +61,16 @@ export default function KeyReveal({ state }) {
         <li>
           {ready ? (
             <>
-              <button type="button" onClick={download} className={buttonClass}>
-                Download the EA for {state.label}
-              </button>
+              <span className="flex flex-wrap gap-2">
+                <button type="button" onClick={copyCode} className={buttonClass}>
+                  {copied ? "Copied" : "Copy the code for MetaEditor"}
+                </button>
+                <button type="button" onClick={download} className={buttonClass}>
+                  Download the EA for {state.label}
+                </button>
+              </span>
               <span className="mt-1 block text-xs text-muted">
-                {saved ? `Saved as ${eaFileName(state.label)}. ` : ""}Its SyncUrl and SyncKey are already filled in.
+                {saved ? `Saved as ${eaFileName(state.label)}. ` : ""}Either way, this account&apos;s SyncUrl and SyncKey are already in it.
               </span>
               {error && <span className="mt-1 block text-xs text-down">{error}</span>}
             </>
@@ -57,9 +79,14 @@ export default function KeyReveal({ state }) {
           )}
         </li>
         <li>
-          In MetaTrader 5: <span className="font-medium">File, Open Data Folder</span>, then <span className="font-mono">MQL5/Experts</span>. Put the file there.
-          In the Navigator, right-click <span className="font-medium">Expert Advisors</span> and choose <span className="font-medium">Refresh</span>.
-          If it still is not listed, double-click the file to open it in MetaEditor and press <span className="font-medium">Compile</span>.
+          <span className="font-medium">Copied the code:</span> in MetaTrader 5 press F4 to open MetaEditor, then{" "}
+          <span className="font-medium">File, New, Expert Advisor (template)</span>, name it <span className="font-mono">KeystoneSync</span>, Next until
+          Finish. Select everything in the new file (Ctrl+A), paste (Ctrl+V) and press <span className="font-medium">Compile</span> (F7).
+          <span className="mt-1 block">
+            <span className="font-medium">Downloaded the file:</span> <span className="font-medium">File, Open Data Folder</span>, then{" "}
+            <span className="font-mono">MQL5/Experts</span>; put it there, then right-click <span className="font-medium">Expert Advisors</span> in the
+            Navigator and choose <span className="font-medium">Refresh</span>.
+          </span>
         </li>
         <li>
           <span className="font-medium">Tools, Options, Expert Advisors</span>: tick &quot;Allow WebRequest for listed URL&quot; and add this address:
