@@ -105,6 +105,9 @@ people. Lost phone: **Reset 2FA**. Forgotten password: **Password link**.
 
 ## Development
 
+**On a new laptop, start with [`docs/NEW-MACHINE.md`](docs/NEW-MACHINE.md).**
+Where things stand is in [`docs/handoff.md`](docs/handoff.md), newest first.
+
 ```bash
 npm ci
 npm test         # unit tests, plus the schema run against an in-process Postgres

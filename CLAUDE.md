@@ -22,3 +22,21 @@ the architecture reference.
 - Business logic in `src/lib/*.js` with a matching `tests/<name>.test.mjs`.
 - Double quotes, semicolons. Commit subjects are imperative sentences, no
   prefixes.
+
+## Working across machines
+
+Worked on from more than one laptop and from cloud sessions.
+`docs/NEW-MACHINE.md` is the setup guide.
+
+1. **`git pull` before the first edit**, every session.
+2. **Read `docs/handoff.md`** before touching code. Newest entry at the top.
+3. **`main` is production.** Once Vercel is linked, every push to `main`
+   deploys. Half-finished work goes on a `wip/` branch.
+4. **Commit author must be `281717050+karamveergill3@users.noreply.github.com`.**
+   Vercel's free plan silently refuses to deploy commits by anyone else. If
+   a push does not go live, check the last commit's author first.
+5. **Commit and push before stopping.** Stashes and untracked files do not
+   leave the machine they are on.
+6. **Write a handoff entry** at the top of `docs/handoff.md` when wrapping up.
+7. **There is one database.** `npm run dev` with a filled-in `.env.local`
+   reads and writes the live Supabase project.
