@@ -65,6 +65,10 @@ along with the margin figures the EA already sent.
   older EA keep syncing; they just do not list open positions until they
   get the new file (New key, then download).
 
+- The live site has a demo account, "DEMO · Test account · 50k" in V100,
+  loaded from `supabase/demo-account.sql`. Remove it when real accounts
+  are in (the delete is at the top of that file), or archive it.
+
 ### Still needs a human
 
 - [ ] Run `supabase/schema.sql` in the Supabase SQL editor, then deploy.
