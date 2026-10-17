@@ -34,17 +34,28 @@ accounts, completely separate from every other project.
 ### Watch out
 
 - **The GitHub repository is public.** Nothing secret is in it (the
-  Supabase key in `.env.local.example` is the public anon key), but code
-  and docs are readable by anyone. To make it private: GitHub, the repo's
-  Settings, General, Danger Zone, Change visibility.
+  Supabase key in `.env.local.example` is the public publishable key), but
+  code and docs are readable by anyone. Its history also still names
+  another project, in commits `d86b819`, `fd7130c` and `b175582`: removing
+  the words from today's files does not hide them; making the repository
+  private does (GitHub, the repo's Settings, General, Danger Zone, Change
+  visibility).
+- **Supabase keys.** The two Supabase variables keep their names but should
+  hold the new keys: the publishable key (`sb_publishable_`) in
+  `NEXT_PUBLIC_SUPABASE_ANON_KEY` and the secret key (`sb_secret_`) in
+  `SUPABASE_SERVICE_ROLE_KEY`. If Vercel was first set up with the legacy
+  `anon`/`service_role` keys, they work until Supabase retires them at the
+  end of 2026: before then, swap the two values on Vercel, redeploy, check
+  the site, and only then deactivate the legacy keys in Supabase. No code
+  change is needed; the client library sends either kind correctly.
 - **New sign-ups are still switched on in Supabase** until step 1a of the
   setup prompt is done. A stranger who signs up still sees nothing (they
   are not a member), but turn it off first.
 - **There is one database.** Running the site locally uses the same data
   as the live site.
-- **Pushes to `main` deploy** once Vercel is linked. Commits must be
-  authored by `281717050+karamveergill3@users.noreply.github.com` or Vercel
-  refuses to deploy them.
+- **Pushes to `main` deploy** once Vercel is linked. Keep commits authored
+  by `281717050+karamveergill3@users.noreply.github.com`: once the
+  repository is private, Vercel refuses to deploy anyone else's.
 - The EA has not been compiled yet: that needs MetaEditor on Windows (see
   `docs/NEW-MACHINE.md`).
 - `schema.sql` must stay re-runnable, and view columns may only be added
@@ -60,7 +71,7 @@ To have Claude do the first four in your browser: in a session with Chrome
       the live address, check TOTP is on.
 - [ ] Vercel: import `karamveergill3/Keystone-Monitor` as project
       `keystone-monitor` with the four environment variables in
-      `.env.local.example` (service-role key from the Supabase dashboard).
+      `.env.local.example` (the secret key from the Supabase dashboard).
 - [ ] First admin, by the dashboard route in the setup prompt (Supabase
       Authentication, Users, Add user, then the SQL insert). This needs no
       local secrets; `scripts/create-admin.mjs` is the alternative only for
@@ -69,3 +80,5 @@ To have Claude do the first four in your browser: in a session with Chrome
       compile the EA in MetaEditor and attach it to that account's terminal.
 - [ ] Invite partners from the Admin screen.
 - [ ] Decide whether the GitHub repository should be private.
+- [ ] Before the end of 2026: make sure Vercel holds the new publishable
+      and secret keys, not the legacy ones (see Watch out).

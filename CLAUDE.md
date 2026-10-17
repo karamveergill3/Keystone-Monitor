@@ -35,8 +35,9 @@ Worked on from more than one laptop and from cloud sessions.
 3. **`main` is production.** Once Vercel is linked, every push to `main`
    deploys. Half-finished work goes on a `wip/` branch.
 4. **Commit author must be `281717050+karamveergill3@users.noreply.github.com`.**
-   Vercel's free plan silently refuses to deploy commits by anyone else. If
-   a push does not go live, check the last commit's author first. A cloud
+   Vercel's free plan silently refuses to deploy a private repository's
+   commits by anyone else (the repository is public today; set it anyway).
+   If a push does not go live, check the last commit's author first. A cloud
    session starts as `Claude <noreply@anthropic.com>`: before its first
    commit, run `git config user.name "Karam Gill"` and
    `git config user.email "281717050+karamveergill3@users.noreply.github.com"`

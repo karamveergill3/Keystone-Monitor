@@ -71,8 +71,12 @@ project. What is still pending for it is in `docs/handoff.md`, and
 ### 2. Vercel
 
 1. Import this repository as a new project.
-2. Set the variables in `.env.local.example`: the Supabase URL, anon key,
-   service-role key, and `APP_URL`.
+2. Set the variables in `.env.local.example`: the Supabase URL, the
+   publishable key (in `NEXT_PUBLIC_SUPABASE_ANON_KEY`), the secret key (in
+   `SUPABASE_SERVICE_ROLE_KEY`), and `APP_URL`. Both keys are under Project
+   Settings, API Keys, "Publishable and secret API keys"; the legacy
+   `anon`/`service_role` keys also work until Supabase retires them at the
+   end of 2026.
 3. Deploy, and add your domain if you have one.
 
 ### 3. The first admin

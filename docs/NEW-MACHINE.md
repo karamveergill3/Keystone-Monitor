@@ -33,9 +33,9 @@ fetched fresh on each machine.
 - **No install: a cloud session.** Start one at claude.ai/code and choose
   the `Keystone-Monitor` repository. It can read, change, test and push the
   code, but it cannot use Chrome on your laptop. Two things to tell it:
-  1. A cloud session commits as `Claude <noreply@anthropic.com>`, which
-     Vercel will not deploy. Before its first commit it must run the two
-     `git config` lines from step 4 inside its clone.
+  1. A cloud session commits as `Claude <noreply@anthropic.com>`. Before
+     its first commit it must run the two `git config` lines from step 4
+     inside its clone, so its commits deploy (see step 4).
   2. Cloud sessions push to a `claude/...` branch unless told to use
      `main`. Say which you want.
 - **On the laptop itself.** Follow the steps below once. Then Claude Code
@@ -62,10 +62,17 @@ fetched fresh on each machine.
 
 1. `git --version` and `node --version`. If both work and Node prints
    v22 or later, skip to step 2.
-2. Otherwise `winget install OpenJS.NodeJS.LTS --scope user`, close every
-   PowerShell window, open a new one, and `node --version` should print
-   v22 or later. CI uses 24; from 28 October 2026 this package installs
-   Node 26, which also works.
+2. If `git --version` failed: `winget install Git.Git --scope user` (Git
+   for Windows, which also brings the Git Credential Manager used in
+   step 2).
+3. If `node --version` failed or printed less than v22:
+   `winget install OpenJS.NodeJS.LTS --scope user`.
+4. Close every PowerShell window, open a new one, and run both checks
+   again. Node should print v22 or later. CI uses 24; from 28 October 2026
+   this package installs Node 26, which also works. If Node still prints
+   an older version, an all-users Node comes first on PATH
+   (`where.exe node` lists both). Removing it needs an administrator, so
+   use a cloud session until then.
 
 **Mac** (no admin, no Homebrew):
 
@@ -73,30 +80,36 @@ fetched fresh on each machine.
    installed. If not, run `xcode-select --install` and accept. If macOS asks
    for an administrator password you do not have, stop here and use a cloud
    session: nothing below works on this Mac without git.
-2. **Make new Terminal windows pick things up.** Terminal starts bash as a
-   login shell, which reads `~/.bash_profile` and ignores `~/.bashrc`, while
-   installers write to `~/.bashrc`. Make one load the other, once:
+2. **Make new Terminal windows pick things up.** Terminal starts your
+   login shell. On any Mac account made since macOS 10.15 that is zsh,
+   which reads `~/.zshrc`. Older accounts may still use bash, which reads
+   only the first of `~/.bash_profile`, `~/.bash_login` and `~/.profile`
+   and ignores `~/.bashrc`. `echo $SHELL` shows which. This covers both
+   and is safe to run again:
 
    ```bash
-   touch ~/.bashrc ~/.zshrc
-   grep -q '\.bashrc' ~/.bash_profile 2>/dev/null || echo '[ -f ~/.bashrc ] && . ~/.bashrc' >> ~/.bash_profile
-   grep -q '\.local/bin' ~/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+   touch ~/.zshrc ~/.bashrc
+   for f in ~/.bash_profile ~/.bash_login ~/.profile; do [ -f "$f" ] && break; done
+   [ -f "$f" ] || f=~/.bash_profile
+   grep -qs '\.bashrc' "$f" || printf '\n[ -n "$BASH_VERSION" ] && [ -f ~/.bashrc ] && . ~/.bashrc\n' >> "$f"
+   for f in ~/.zshrc ~/.bashrc; do grep -qs '\.local/bin' "$f" || printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "$f"; done
    ```
-
-   (`~/.zshrc` is created so the same steps work if you switch to zsh.)
 3. **Node, through nvm.** If `command -v nvm` already prints `nvm`, skip
-   to the last line. Otherwise run the install command from
+   to the two commands below. Otherwise run the install command from
    https://github.com/nvm-sh/nvm, quit Terminal (Cmd-Q) and reopen it, and
    check `command -v nvm` prints `nvm`. Then:
 
    ```bash
    nvm install 24 && nvm alias default 24
-   node --version    # v24...
+   node --version
    ```
+
+   The last line should print `v24...`.
 
    If `nvm` is still not found, run
    `grep -l NVM_DIR ~/.bashrc ~/.bash_profile ~/.zshrc 2>/dev/null` to see
-   where the installer wrote, and move those lines into `~/.bashrc`.
+   where the installer wrote, and move those lines into `~/.zshrc` if
+   `echo $SHELL` ends in `zsh`, otherwise into `~/.bashrc`.
 
 ### 2. Permission to push
 
@@ -108,7 +121,10 @@ Keystone-Monitor to that token.
 - **Windows**: Git for Windows includes Git Credential Manager. The first
   `git push` opens a browser to sign in to GitHub.
 - **Mac, no extra software**: on github.com, Settings, Developer settings,
-  Fine-grained tokens, Generate new token. Resource owner `karamveergill3`,
+  Personal access tokens, Fine-grained tokens, Generate new token.
+  Expiration: no expiration, or a date you will remember (the default is
+  30 days; when it lapses the next `git push` asks for the password again,
+  and you paste a new token). Resource owner `karamveergill3`,
   only `Keystone-Monitor` (plus any other repository this Mac pushes to),
   permissions Contents: Read and write, Workflows: Read and write. Check
   `git config --get credential.helper` prints `osxkeychain` (if it prints
@@ -119,7 +135,9 @@ Keystone-Monitor to that token.
 - **Mac, GitHub CLI instead**: the `.pkg` on cli.github.com needs an
   administrator. Download the `gh_*_macOS_arm64.zip` (Apple silicon) or
   `_amd64.zip` (Intel) from https://github.com/cli/cli/releases/latest,
-  unzip it, copy `bin/gh` into `~/.local/bin`, open a new Terminal, then
+  open it so it unpacks in Downloads, then run
+  `mkdir -p ~/.local/bin && cp ~/Downloads/gh_*_macOS_*/bin/gh ~/.local/bin/`,
+  open a new Terminal, then
   `gh auth login --scopes workflow && gh auth setup-git`. (Without the
   `workflow` scope GitHub refuses pushes that change
   `.github/workflows/`.)
@@ -145,9 +163,11 @@ cd ~/dev/keystone-monitor
 
 ### 4. Your commit identity: this decides whether a push deploys
 
-Vercel's free plan only deploys commits whose author is the account owner.
-A commit with any other author pushes fine and then never goes live. Inside
-the clone:
+Vercel's free plan deploys a private repository's commits only when their
+author is the account owner: any other author's commit pushes fine and then
+never goes live. The repository is public today (see `docs/handoff.md`),
+but set the identity either way, so nothing changes if it is made private.
+Inside the clone:
 
 ```bash
 git config user.name "Karam Gill"
@@ -180,14 +200,17 @@ PowerShell window.
 
 Skip this if you only change code and let Vercel run it.
 
-Copy the template (`Copy-Item .env.local.example .env.local` on Windows,
-`cp .env.local.example .env.local` on Mac) and fill in:
+Copy the template if there is no `.env.local` yet
+(`if (-not (Test-Path .env.local)) { Copy-Item .env.local.example .env.local }`
+on Windows, `[ -f .env.local ] || cp .env.local.example .env.local` on Mac)
+and fill in:
 
 - `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`: already
   filled in. They are public by design.
-- `SUPABASE_SERVICE_ROLE_KEY`: open
+- `SUPABASE_SERVICE_ROLE_KEY`: the project's **secret** key. Open
   https://supabase.com/dashboard/project/avsfygkauoipytiqraau, then Project
-  Settings, API Keys, Legacy API keys, `service_role`, Reveal. Paste it into
+  Settings, API Keys, the "Publishable and secret API keys" tab, Secret
+  keys, `default`, reveal and copy. It starts `sb_secret_`. Paste it into
   `.env.local` only. Never commit it, never send it in a chat.
   (`vercel env pull` cannot fetch it: Vercel returns `[SENSITIVE]` for
   variables stored as Sensitive.)
@@ -208,9 +231,16 @@ the live SyncUrl (the live address followed by `/api/sync`).
 ### 7. Claude on this laptop
 
 - **Claude Code**: Mac `curl -fsSL https://claude.ai/install.sh | bash`;
-  Windows PowerShell `irm https://claude.ai/install.ps1 | iex`. Then open a
-  **new** terminal window and run `claude --version`. On a Mac, the
-  `~/.local/bin` line from step 1 is what puts `claude` on the PATH.
+  Windows PowerShell `irm https://claude.ai/install.ps1 | iex`. The
+  installer does not change PATH. On a Mac, the `~/.local/bin` line from
+  step 1 covers it. On Windows, run this once (no admin needed, safe to
+  repeat):
+
+  ```powershell
+  $p = [Environment]::GetEnvironmentVariable('PATH', 'User'); if (($p -split ';') -notcontains "$env:USERPROFILE\.local\bin") { [Environment]::SetEnvironmentVariable('PATH', "$p;$env:USERPROFILE\.local\bin", 'User') }
+  ```
+
+  Then open a **new** terminal window and run `claude --version`.
 - **Desktop app** (optional): https://claude.ai/download. On a Mac without
   admin, drag Claude into an `Applications` folder inside your home folder
   (create it if needed) rather than the main one. Use the Code tab with

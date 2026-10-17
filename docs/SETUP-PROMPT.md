@@ -16,8 +16,7 @@ Facts you need:
 - GitHub repo: karamveergill3/Keystone-Monitor (branch main)
 - Vercel account: karamveergill3 (Hobby). Project name to use: keystone-monitor
 - Supabase project ID avsfygkauoipytiqraau, named "Keystone Monitor", URL https://avsfygkauoipytiqraau.supabase.co
-- Public anon key (safe to show):
-  eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF2c2Z5Z2thdW9pcHl0aXFyYWF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIyNDEzNTEsImV4cCI6MjEwNzgxNzM1MX0.y8WHwD9SeMmLGKzLB4IcU4Jrb2OS1-oqeZfmxhxo_8U
+- Publishable key (public, safe to show): sb_publishable_K6LHHbTUldpH9PMg2sPvmQ_9wPTn6Ze
 
 Steps (skip any that are already done, and tell me which):
 
@@ -25,12 +24,12 @@ Steps (skip any that are already done, and tell me which):
    a. Authentication > Sign In / Providers > Email: turn OFF "Allow new users to sign up". Leave email sign-in itself enabled.
    b. Authentication > URL Configuration: Site URL = https://keystone-monitor.vercel.app (if step 2 gives a different address, use that instead).
    c. Authentication > Multi-Factor: make sure TOTP (authenticator app) is enabled.
-   d. Project Settings > API Keys > Legacy API keys: reveal and copy the service_role key, for step 2. Do not show it to me.
+   d. Project Settings > API Keys > "Publishable and secret API keys" tab > Secret keys: reveal and copy the "default" secret key (it starts sb_secret_), for step 2. If there is no secret key, create one named default. Do not show it to me. Use these new keys, not the Legacy API keys tab: Supabase retires legacy keys at the end of 2026.
 
-2. Vercel: go to https://vercel.com/new and import karamveergill3/Keystone-Monitor (if it is not listed, use "Adjust GitHub App Permissions" and grant access to that repo). Project name keystone-monitor, framework Next.js, root directory the repo root. Before deploying, add these Environment Variables (all environments):
+2. Vercel: go to https://vercel.com/new and import karamveergill3/Keystone-Monitor (if it is not listed, use "Adjust GitHub App Permissions" and grant access to that repo). Project name keystone-monitor, framework Next.js, root directory the repo root. Before deploying, add these Environment Variables. NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY and APP_URL go in all environments. SUPABASE_SERVICE_ROLE_KEY goes in Production and Preview only, marked Sensitive: Vercel does not allow a Sensitive variable in Development. If the import page has no Sensitive switch, add it there for Production and Preview, then after the first deploy edit it under Settings > Environment Variables to Sensitive and Redeploy.
    - NEXT_PUBLIC_SUPABASE_URL = https://avsfygkauoipytiqraau.supabase.co
-   - NEXT_PUBLIC_SUPABASE_ANON_KEY = the anon key above
-   - SUPABASE_SERVICE_ROLE_KEY = the service_role key from step 1d (mark it Sensitive)
+   - NEXT_PUBLIC_SUPABASE_ANON_KEY = the publishable key above (the variable keeps its old name)
+   - SUPABASE_SERVICE_ROLE_KEY = the secret key from step 1d (Production and Preview only, Sensitive; the variable keeps its old name)
    - APP_URL = https://keystone-monitor.vercel.app
    Deploy. When it finishes, note the production address (Settings > Domains). If it is not keystone-monitor.vercel.app, set APP_URL to the real address, redeploy, and fix the Supabase Site URL from step 1b.
 
