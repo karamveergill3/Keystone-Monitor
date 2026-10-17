@@ -3,37 +3,38 @@
 /* Every colour in the app is one of these. New colours go here, not as
    one-off hex values in a component.
 
-   Dark and neon, after the logo: near-black panels, cyan and magenta for
-   identity, neon green and pink for profit and loss. Every text colour is
-   at least 5.4:1 against bg, panel, panel-2 and every soft fill. */
+   Pastel and futuristic, after the logo: a cool light base, pastel cyan,
+   pink and lilac fills, deep indigo ink. Pastels are for fills; every text
+   colour is at least 4.9:1 against bg, panel, panel-2 and every soft fill. */
 @theme {
-  --color-bg: #06070b;
-  --color-panel: #0d0f16;
-  --color-panel-2: #141826;
-  --color-line: #232a3d;
+  --color-bg: #f4f6fb;
+  --color-panel: #ffffff;
+  --color-panel-2: #eef1fa;
+  --color-line: #dde2f0;
   /* Form field borders: at least 3:1 against panel and bg. */
-  --color-line-strong: #5f6d8e;
-  --color-ink: #e8eefc;
-  --color-muted: #8f9bb5;
-  --color-accent: #2ef2d0;
-  --color-accent-soft: #0b2a2a;
-  --color-magenta: #ff5ad9;
-  --color-up: #3df29a;
-  --color-up-soft: #0e2a20;
-  --color-down: #ff6b8b;
-  --color-down-soft: #2c1220;
-  --color-warn: #ffc65c;
-  --color-warn-soft: #2b2210;
+  --color-line-strong: #7d87ad;
+  --color-ink: #1d2140;
+  --color-muted: #555d7e;
+  --color-accent: #08706a;
+  --color-accent-soft: #d9f7f3;
+  --color-magenta: #a8298a;
+  --color-up: #11764f;
+  --color-up-soft: #dcf6ea;
+  --color-down: #b52a57;
+  --color-down-soft: #fde4ec;
+  --color-warn: #835409;
+  --color-warn-soft: #fdf0d2;
 
   /* Project identity tints, in project sort order. Backgrounds only. */
-  --color-tint-1: #0b2226;
-  --color-tint-2: #261029;
-  --color-tint-3: #0e2a20;
-  --color-tint-4: #1a1530;
+  --color-tint-1: #e1f7f5;
+  --color-tint-2: #fbe5f5;
+  --color-tint-3: #dcf6ea;
+  --color-tint-4: #ece8fb;
 
-  /* Chart series: the logo's cyan and magenta. Lines only, never text. */
-  --color-series-1: #2ef2d0;
-  --color-series-2: #ff5ad9;
+  /* Chart series and HUD brackets: the logo's cyan and magenta, pastel.
+     Checked for colour-blind separation. Lines only, never text. */
+  --color-series-1: #14a396;
+  --color-series-2: #a855c7;
 
   --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -51,18 +52,18 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
-/* A faint measuring grid with two soft glows behind it, the logo's cyan
-   and magenta. Fixed, so it does not scroll with the page. */
+/* A faint measuring grid with soft pastel haze behind it, the logo's
+   cyan and pink. Fixed, so it does not scroll with the page. */
 body {
   background-color: var(--color-bg);
   background-image:
-    radial-gradient(1100px 480px at 12% -12%, rgb(46 242 208 / 0.09), transparent 62%),
-    radial-gradient(900px 460px at 96% -8%, rgb(255 90 217 / 0.09), transparent 60%),
-    linear-gradient(rgb(143 155 181 / 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(143 155 181 / 0.045) 1px, transparent 1px);
+    radial-gradient(1100px 480px at 10% -14%, rgb(120 230 220 / 0.32), transparent 62%),
+    radial-gradient(900px 460px at 96% -10%, rgb(244 170 225 / 0.32), transparent 60%),
+    linear-gradient(rgb(110 120 190 / 0.07) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(110 120 190 / 0.07) 1px, transparent 1px);
   background-size: auto, auto, 32px 32px, 32px 32px;
   background-attachment: fixed;
   color: var(--color-ink);
@@ -78,11 +79,12 @@ body {
   letter-spacing: -0.01em;
 }
 
-/* The cyan-to-magenta line under the header, as on the logo's edge. */
+/* A holographic line under the header: cyan, lilac and pink, as on the
+   logo's edge. */
 .neon-rule {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--color-accent) 20%, var(--color-magenta) 80%, transparent);
-  box-shadow: 0 0 10px rgb(46 242 208 / 0.45);
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #5fe0d4 18%, #b9a4f5 50%, #f29ad8 82%, transparent);
+  box-shadow: 0 0 12px rgb(185 164 245 / 0.55);
 }
 
 /* The header sticks from the sm breakpoint up: keep anything scrolled or
@@ -93,7 +95,7 @@ body {
   }
 }
 
-/* HUD corner brackets: cyan top left, magenta bottom right, as on the
+/* HUD corner brackets: cyan top left, orchid bottom right, as on the
    logo. Decoration only; the card keeps its own background and border. */
 .hud {
   position: relative;
@@ -105,9 +107,9 @@ body {
   pointer-events: none;
   border-radius: inherit;
   background:
-    linear-gradient(var(--color-accent), var(--color-accent)) top left / 16px 1.5px no-repeat,
-    linear-gradient(var(--color-accent), var(--color-accent)) top left / 1.5px 16px no-repeat,
-    linear-gradient(var(--color-magenta), var(--color-magenta)) bottom right / 16px 1.5px no-repeat,
-    linear-gradient(var(--color-magenta), var(--color-magenta)) bottom right / 1.5px 16px no-repeat;
+    linear-gradient(var(--color-series-1), var(--color-series-1)) top left / 16px 2px no-repeat,
+    linear-gradient(var(--color-series-1), var(--color-series-1)) top left / 2px 16px no-repeat,
+    linear-gradient(var(--color-series-2), var(--color-series-2)) bottom right / 16px 2px no-repeat,
+    linear-gradient(var(--color-series-2), var(--color-series-2)) bottom right / 2px 16px no-repeat;
   opacity: 0.85;
 }
