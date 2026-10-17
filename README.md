@@ -87,18 +87,26 @@ in Vercel and redeploy; every browser is signed out of admin.
 ### 4. Adding an account
 
 1. Admin -> Accounts: choose the project, name the account, **Add account**.
-   Copy the SyncKey and SyncUrl it shows; the key is never shown again.
-2. On the terminal: download the EA from the Admin screen, copy it to
-   `MQL5/Experts`, compile it in MetaEditor.
-3. Tools -> Options -> Expert Advisors: tick **Allow WebRequest for listed
-   URL** and add the site's origin (`APP_URL`).
-4. Attach KeystoneSync to one chart on that account, paste the two values,
-   OK. The chart's corner shows each sync's result, and the account fills in
-   on the site within a couple of minutes, full history included.
+2. **Download the EA for <account>**. The file has that account's SyncUrl
+   and SyncKey built in (the key is shown only then; only its hash is
+   stored).
+3. On the terminal: File -> Open Data Folder -> `MQL5/Experts`, put the file
+   there, then right-click Expert Advisors in the Navigator -> Refresh (or
+   open it in MetaEditor and press Compile).
+4. Tools -> Options -> Expert Advisors: tick **Allow WebRequest for listed
+   URL** and add the site's origin (`APP_URL`; the admin screen shows it
+   with a Copy button).
+5. Drag the EA onto one chart of that account and press OK; nothing needs
+   typing. The chart's corner shows each sync's result, and the account
+   fills in on the site within a couple of minutes, full history included.
 
-A lost key: **New key** on the admin screen, then paste it into the EA. A
-gap in history: **Resync history** makes the EA send everything again;
-nothing is duplicated.
+The blank EA (top of the admin screen) and the two values under "Setting it
+up by hand" are there for doing it the old way.
+
+A lost key, or a terminal to set up again: **New key** on the admin screen
+and download the EA again; the old key stops working at once. A gap in
+history: **Resync history** makes the EA send everything again; nothing is
+duplicated.
 
 ### 5. Sharing the site
 
