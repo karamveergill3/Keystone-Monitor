@@ -27,9 +27,12 @@ export default function AccountsTable({ rows }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id} className="border-b border-line/70 last:border-0 hover:bg-panel-2/60">
-              <td className="px-4 py-2.5">
-                <Link href={`/accounts/${r.id}`} className="font-medium text-ink hover:text-accent">
+              <td className="min-w-60 px-4 py-2.5">
+                <Link href={`/accounts/${r.id}`} className="group inline-flex flex-wrap items-center gap-x-2 font-medium text-ink hover:text-accent">
                   {r.label}
+                  <span className="rounded border border-accent/40 bg-accent-soft px-1.5 text-xs font-medium whitespace-nowrap text-accent group-hover:border-accent">
+                    Breakdown <span aria-hidden="true">&rarr;</span>
+                  </span>
                 </Link>
                 <span className="block text-xs text-muted">
                   {r.account_number ? `${r.account_number} · ${r.broker ?? r.server}` : "Not connected yet"}

@@ -8,13 +8,15 @@ machines. Keep the four headings.
 
 ### What changed
 
-- A pastel, futuristic look to go with the logo: a cool light base with a
-  faint grid and pastel cyan/pink haze, a holographic rule under the
-  header, HUD corner brackets (`.hud`), Space Grotesk with figures in
-  JetBrains Mono, teal and orchid chart lines; every text colour at least
+- A pastel, futuristic look to go with the logo: a cool light base under
+  a soft pastel aurora with fine grain, a holographic rule under the
+  header, HUD corner brackets (`.hud`), Space Grotesk with figures (`.num`
+  and the chart axes) in Oxanium, whose digits are all one width; code and
+  keys use the system monospace. Teal and orchid chart lines; every text colour at least
   5:1 on its surface (tokens in `src/app/globals.css`). Sync status is a
   filled dot, a hollow ring (offline) or a dashed ring (waiting), so it
   reads without colour.
+- Each overview row has a **Breakdown** link to that account's page.
 - The logo (`src/lib/logo.js`, `src/app/icon.svg`, `src/app/apple-icon.js`)
   is the owner's neon winged keystone, redrawn as SVG; the original is in
   `public/brand`.

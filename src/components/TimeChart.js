@@ -51,7 +51,7 @@ export default function TimeChart({ points, currency = "USD", aLabel, bLabel, em
             domain={["auto", "auto"]}
           />
           <Tooltip
-            contentStyle={{ background: "var(--color-panel-2)", border: "1px solid var(--color-line-strong)", borderRadius: 6, fontSize: 13, color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}
+            contentStyle={{ background: "var(--color-panel-2)", border: "1px solid var(--color-line-strong)", borderRadius: 6, fontSize: 13, color: "var(--color-ink)", fontFamily: "var(--font-num)" }}
             labelStyle={{ color: "var(--color-muted)", marginBottom: 2 }}
             itemStyle={{ color: "var(--color-ink)" }}
             cursor={{ stroke: "var(--color-line)" }}
