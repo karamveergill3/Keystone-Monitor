@@ -1,7 +1,8 @@
 import { buttonClass } from "@/lib/ui";
 import { APP_NAME } from "@/lib/site";
 
-export const metadata = { title: "Continue" };
+// The token is in this page's address: send it nowhere as a referrer.
+export const metadata = { title: "Continue", referrer: "no-referrer" };
 
 const TYPES = new Set(["invite", "recovery"]);
 
