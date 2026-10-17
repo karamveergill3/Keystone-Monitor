@@ -21,6 +21,13 @@ const csp = `
 
 const nextConfig = {
   poweredByHeader: false,
+  // Every production build compiles from scratch. Turbopack's on-disk build
+  // cache, which Vercel restores between deploys, once shipped the previous
+  // stylesheet with new pages (Tailwind's output was not invalidated), and
+  // this site builds in well under a minute without it.
+  experimental: {
+    turbopackFileSystemCacheForBuild: false,
+  },
   async headers() {
     return [
       {
