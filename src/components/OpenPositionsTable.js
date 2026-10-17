@@ -1,12 +1,25 @@
 import Pnl from "@/components/Pnl";
 import { ago, londonTime, money, number } from "@/lib/format";
 import { openSnapshot } from "@/lib/openPositions";
+import { priceDecimals } from "@/lib/baskets";
 
 const EMPTY = "rounded-lg border border-line bg-panel p-6 text-sm text-muted";
 
 // A stop or target of 0 is MT5 for "none set".
-function level(value) {
-  return value === null || value === undefined || Number(value) === 0 ? "-" : number(value, 5);
+function level(value, decimals) {
+  return value === null || value === undefined || Number(value) === 0 ? "-" : number(value, decimals);
+}
+
+// Price decimals per symbol, worked out from its own quotes (an index
+// quoted to 0.1 shows 2, a major pair 5), so 20,135 does not read
+// 20,135.00000.
+function symbolDecimals(rows) {
+  const quotes = new Map();
+  for (const p of rows) {
+    if (!quotes.has(p.symbol)) quotes.set(p.symbol, []);
+    quotes.get(p.symbol).push(p.open_price, p.current_price, p.sl, p.tp);
+  }
+  return new Map([...quotes].map(([symbol, values]) => [symbol, priceDecimals(values)]));
 }
 
 // MT5 reports margin level as a percentage already (4000 is 4,000%), and
@@ -37,6 +50,7 @@ function emptyText(state, reported, account) {
 // behind are never listed as current.
 export default function OpenPositionsTable({ rows, account, currency }) {
   const { state, rows: list, reported } = openSnapshot(rows, account);
+  const decimals = symbolDecimals(list);
   if (state === "waiting") {
     return <p className={EMPTY}>Open positions appear here once the EA is syncing.</p>;
   }
@@ -68,26 +82,29 @@ export default function OpenPositionsTable({ rows, account, currency }) {
                 </tr>
               </thead>
               <tbody>
-                {list.map((p) => (
-                  <tr
-                    key={p.ticket}
-                    className="border-b border-line/70 last:border-0"
-                    title={`Ticket ${p.ticket}${p.magic ? ` · magic ${p.magic}` : ""}${p.comment ? ` · ${p.comment}` : ""}`}
-                  >
-                    <td className="px-4 py-2.5 text-xs">{londonTime(p.open_time)}</td>
-                    <td className="px-4 py-2.5">{p.symbol ?? "-"}</td>
-                    <td className={`px-4 py-2.5 ${p.side === "buy" ? "text-up" : p.side === "sell" ? "text-down" : "text-muted"}`}>
-                      {p.side ?? "-"}
-                    </td>
-                    <td className="num px-4 py-2.5 text-right">{number(p.volume, 2)}</td>
-                    <td className="num px-4 py-2.5 text-right">{p.open_price === null ? "-" : number(p.open_price, 5)}</td>
-                    <td className="num px-4 py-2.5 text-right">{p.current_price === null ? "-" : number(p.current_price, 5)}</td>
-                    <td className="num px-4 py-2.5 text-right text-muted">{level(p.sl)}</td>
-                    <td className="num px-4 py-2.5 text-right text-muted">{level(p.tp)}</td>
-                    <td className="num px-4 py-2.5 text-right">{money(p.swap, currency)}</td>
-                    <td className="px-4 py-2.5 text-right"><Pnl value={Number(p.profit)} currency={currency} /></td>
-                  </tr>
-                ))}
+                {list.map((p) => {
+                  const d = decimals.get(p.symbol) ?? 5;
+                  return (
+                    <tr
+                      key={p.ticket}
+                      className="border-b border-line/70 last:border-0"
+                      title={`Ticket ${p.ticket}${p.magic ? ` · magic ${p.magic}` : ""}${p.comment ? ` · ${p.comment}` : ""}`}
+                    >
+                      <td className="px-4 py-2.5 text-xs">{londonTime(p.open_time)}</td>
+                      <td className="px-4 py-2.5">{p.symbol ?? "-"}</td>
+                      <td className={`px-4 py-2.5 ${p.side === "buy" ? "text-up" : p.side === "sell" ? "text-down" : "text-muted"}`}>
+                        {p.side ?? "-"}
+                      </td>
+                      <td className="num px-4 py-2.5 text-right">{number(p.volume, 2)}</td>
+                      <td className="num px-4 py-2.5 text-right">{p.open_price === null ? "-" : number(p.open_price, d)}</td>
+                      <td className="num px-4 py-2.5 text-right">{p.current_price === null ? "-" : number(p.current_price, d)}</td>
+                      <td className="num px-4 py-2.5 text-right text-muted">{level(p.sl, d)}</td>
+                      <td className="num px-4 py-2.5 text-right text-muted">{level(p.tp, d)}</td>
+                      <td className="num px-4 py-2.5 text-right">{money(p.swap, currency)}</td>
+                      <td className="px-4 py-2.5 text-right"><Pnl value={Number(p.profit)} currency={currency} /></td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

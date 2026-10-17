@@ -15,9 +15,10 @@ data or credentials with any other system.
 MT5 terminal                       This site (Vercel)                 Supabase
 KeystoneSync.mq5  --- HTTPS --->   /api/sync  (per-account key)  -->  accounts, deals,
 (read-only EA)                                                        equity_samples,
-                                                                      open_positions
+                                                                      open_positions, baskets
                                    Pages, PDFs  <-- server reads ---  account_daily view
 Anyone with the link       --->                                       account_positions view
+                                                                      basket_results view
 ```
 
 - **The EA only reads.** `public/ea/KeystoneSync.mq5` has no trading code at
@@ -27,11 +28,40 @@ Anyone with the link       --->                                       account_po
   beside any trading EA.
 - **Open positions are a snapshot.** Each sync replaces the account's
   `open_positions` rows with what the terminal has open, in one transaction
-  (`replace_open_positions` in `schema.sql`), so the account page shows them
-  as of the last sync and a failed sync keeps the previous list. An EA older
+  (`sync_open_positions` in `schema.sql`), so the account page shows them
+  as of the last sync and a failed sync keeps the previous list. Two syncs
+  for one login can overlap (the EA on two charts, or two terminals); the
+  account's row is locked so they take turns, and one older than the list
+  already stored changes nothing. An EA older
   than 2026.10.17.2 does not send them; its syncs leave the table alone, and
   the page, seeing rows older than the last sync, hides them and says to
-  update the EA.
+  update the EA. The current EA is 2026.10.17.4, which also sends each
+  position's `POSITION_IDENTIFIER` (`position_id`), the number its deals
+  carry.
+- **Grid baskets are tracked for their drawdown.** A basket is every open
+  position on one account with the same symbol and side, whatever their
+  magic numbers (a grid EA may give each level its own; merging two EAs'
+  positions overstates a basket, the safe direction for a risk alert).
+  Its floating P&L is profit + swap over its positions; its drawdown is how
+  far that is below zero. With each snapshot, in the same transaction,
+  `track_baskets` in `schema.sql` keeps one `baskets` row per basket's
+  life: its depth now,
+  the most positions and lots it reached, and its worst floating with when
+  it happened and the balance then. A basket closes at the first complete
+  sync without it (not one cut short at the EA's 500, nor one shorter than
+  the terminal's own count), or when its key comes back with none of the
+  same positions. `basket_results` adds what its deals realised: those of
+  every position a sync saw in it, and of any level opened on its symbol
+  and side while it was open (one opened and closed between two syncs was
+  never listed), counting only the deals on its side (on a netting account
+  a reversal keeps the position id, and its close belongs to the side it
+  closed). A tracking failure is undone on its own and logged in the
+  database; the snapshot is still stored and the sync still succeeds. Like
+  the account's max drawdown, a dip between two syncs is not seen.
+- **A basket is flagged** when it is in loss by more than this week's
+  realised profit (closed trades since Monday, London, deposits and
+  withdrawals excluded): closing it now would give back more than the week
+  has banked. In a flat or losing week, any basket in loss is flagged.
 - **One key per account.** Made on the admin screen, shown once, stored only
   as a SHA-256. The first sync binds the key to that login and server; the
   same key from a different login is refused.
@@ -56,6 +86,8 @@ Anyone with the link       --->                                       account_po
 | Gain | Time-weighted, like Myfxbook's Gain: each day's P&L over its opening balance, chained. Deposits and withdrawals do not move it. |
 | Floating drawdown | How far equity is below balance right now. |
 | Open positions, margin | As the terminal reported them at its last sync. Margin level is MT5's own figure, equity over margin. |
+| Basket drawdown | How far a basket's floating P&L (profit + swap of its positions) is below zero, in the account's currency and as a share of balance. Its worst is the lowest seen at any sync while it was open. |
+| Flagged basket | A basket whose floating loss is bigger than this week's realised trading P&L (or any loss, when the week is flat or down). |
 | Max drawdown (account) | Largest fall in equity from its peak, sampled at every sync since the account was first connected. Deposits and withdrawals move the peak, so taking money out is not a drawdown. Broker credit is excluded. |
 | Max drawdown (reports) | Largest day-end fall of the gain index within the report's dates. |
 | Totals | Added up per currency. Accounts in different currencies are never summed together. |
@@ -75,6 +107,17 @@ project. What is still pending for it is in `docs/handoff.md`, and
 1. Create a new project.
 2. SQL Editor: paste and run `supabase/schema.sql`. It is re-runnable; run it
    again after any change to it.
+
+**Schema first, then code.** When a change touches `supabase/schema.sql`,
+apply it in the SQL editor *before* the code that goes with it deploys
+(before the push to `main`, or before promoting the deployment). The new
+pages and `/api/sync` read and call what the schema adds, so code that
+lands first fails until the schema catches up; the schema is written so the
+code still running keeps working against it in the meantime. For the
+basket tracking change, that means applying the schema, then deploying:
+the old site keeps calling `replace_open_positions` and `track_baskets`
+until the new one, which calls `sync_open_positions` and reads
+`equity_samples.credit`, is live.
 
 Supabase Auth is not used, so nothing under Authentication needs setting.
 
@@ -142,7 +185,7 @@ React 19, Tailwind CSS 4, Supabase, Recharts, pdfkit.
 
 | Path | What |
 |---|---|
-| `supabase/schema.sql` | Tables, RLS, views. Applied by hand. |
+| `supabase/schema.sql` | Tables, RLS, views, the function /api/sync calls. Applied by hand, before the code that needs it deploys. |
 | `src/app/api/sync/route.js` | The EA's endpoint. Logic in `src/lib/syncIngest.js`. |
 | `src/lib/accountStats.js` | Every figure, for screens and PDFs alike. |
 | `src/lib/db.js` | The server's database client, for every page and report. |

@@ -4,6 +4,50 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
+## 2026-10-17 (Claude Code, Mac): Grid baskets tracked and flagged, new charts, paged lists; all live
+
+### What changed
+
+- Grid-bot baskets. A basket is every open position on one account with
+  the same symbol and side (magic ignored on purpose). The account page
+  lists the open ones (positions, lots, average price, floating, drawdown,
+  worst so far) and the closed ones (worst drawdown, result from their
+  deals), and flags a basket whose floating loss is more than the week's
+  realised profit (any loss, when the week has banked nothing). The
+  overview and project pages show a red alert for every flagged basket and
+  a Baskets column. Logic in `src/lib/baskets.js`.
+- The database tracks each basket's life: `baskets`, `basket_results`
+  and `sync_open_positions()`, which replaces the snapshot and tracks the
+  baskets in one locked step, ignores a sync older than the last snapshot,
+  and keeps the snapshot if tracking fails. `replace_open_positions()` is
+  superseded and kept only for the rollout window. Equity samples now keep
+  broker credit, which the chart takes out.
+- EA 2026.10.17.4 sends each position's POSITION_IDENTIFIER. Older EAs
+  from 2026.10.17.2 are still tracked (the ticket stands in).
+- Charts: balance is a step line with deposit and withdrawal markers; the
+  equity chart shades the floating drawdown, marks the deepest point and
+  keeps the deepest reading in each window, with round axis figures.
+- Trade history and closed baskets show 10 and 5 a page with arrows; the
+  accounts table's figures are centred; figures use Oxanium.
+- The demo account was reloaded with grid baskets (gold flagged).
+
+### Why
+
+The accounts being tracked run mean reversion grid bots: what matters is
+how deep each basket goes and whether one could wipe out the week.
+
+### Watch out
+
+- Apply `supabase/schema.sql` before deploying code that needs it (this
+  time it was applied first, via the Supabase connector).
+- Two EAs on one login are survivable now, but still one chart per login.
+
+### Still needs a human
+
+- Compile EA 2026.10.17.4 in MetaEditor (not compiled here) and attach it.
+- Drop `replace_open_positions()` (schema, grants, tests) in a later change.
+
+---
 ## 2026-10-17 (Claude Code, Mac): Logo, pastel-futuristic look, one-step terminal setup, open positions; all live
 
 ### What changed

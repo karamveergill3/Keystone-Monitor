@@ -61,6 +61,7 @@ test("open positions are read into rows", () => {
   assert.equal(p.open.length, 2);
   assert.deepEqual(p.open[0], {
     ticket: "1004",
+    position_id: "1004",
     symbol: "XAUUSD",
     side: "buy",
     volume: 0.2,
@@ -102,6 +103,9 @@ test("a payload with a bad open position is refused whole", () => {
     payload({ open: [{ ...pos, open_time: undefined }] }),
     payload({ open: [{ ...pos, open_time: "2026-11-30T00:00:00Z" }] }),
     payload({ open: [pos, { ...pos, ticket: "1006", magic: "lots" }] }),
+    payload({ open: [{ ...pos, position_id: "abc" }] }),
+    payload({ open: [{ ...pos, position_id: "-5" }] }),
+    payload({ open: [{ ...pos, position_id: "" }] }),
   ];
   for (const b of bad) {
     assert.throws(() => parseSyncPayload(b, NOW), SyncPayloadError, JSON.stringify(b.open)?.slice(0, 80));
@@ -122,4 +126,18 @@ test("an open position's side is buy, sell or unknown, and a ticket sent twice i
   const twice = parseSyncPayload(payload({ open: [pos, { ...pos, profit: -10 }] }), NOW);
   assert.equal(twice.open.length, 1);
   assert.equal(twice.open[0].profit, -10);
+});
+
+test("an open position's position_id is read, and is null from an EA that does not send it", () => {
+  const pos = payload().open[0];
+  const { open } = parseSyncPayload(
+    payload({ open: [{ ...pos, position_id: 98765432101 }, { ...pos, ticket: "1008", position_id: " 0042 " }] }),
+    NOW
+  );
+  // A number is taken as its digits, and leading zeros go, as with tickets.
+  assert.deepEqual(open.map((o) => o.position_id), ["98765432101", "42"]);
+  const older = { ...pos };
+  delete older.position_id;
+  assert.equal(parseSyncPayload(payload({ open: [older] }), NOW).open[0].position_id, null);
+  assert.equal(parseSyncPayload(payload({ open: [{ ...pos, position_id: null }] }), NOW).open[0].position_id, null);
 });

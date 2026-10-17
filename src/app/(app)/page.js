@@ -1,9 +1,11 @@
 import Link from "next/link";
 import AccountsTable from "@/components/AccountsTable";
 import CurrencyTotals from "@/components/CurrencyTotals";
+import BasketAlerts, { flaggedItems } from "@/components/BasketAlerts";
 import { db } from "@/lib/db";
-import { listProjects, listAccounts, dailyFor } from "@/lib/data";
+import { listProjects, listAccounts, dailyFor, openPositionsFor, openBasketsFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
+import { accountBaskets } from "@/lib/baskets";
 import { todayKey } from "@/lib/days";
 import { dayLabel } from "@/lib/format";
 import { projectTint } from "@/lib/ui";
@@ -13,9 +15,18 @@ export const metadata = { title: "Overview" };
 export default async function OverviewPage() {
   const supabase = await db();
   const [projects, accounts] = await Promise.all([listProjects(supabase), listAccounts(supabase)]);
-  const daily = await dailyFor(supabase, accounts.map((a) => a.id));
+  const ids = accounts.map((a) => a.id);
+  const [daily, openMap, trackedMap] = await Promise.all([
+    dailyFor(supabase, ids),
+    openPositionsFor(supabase, ids),
+    openBasketsFor(supabase, ids),
+  ]);
   const today = todayKey();
-  const rows = accounts.map((a) => accountRow(a, daily.get(a.id), today));
+  const rows = accounts.map((a) => {
+    const row = accountRow(a, daily.get(a.id), today);
+    const baskets = accountBaskets({ rows: openMap.get(a.id), account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(a.id) });
+    return { ...row, baskets };
+  });
 
   return (
     <div className="space-y-10">
@@ -25,6 +36,7 @@ export default async function OverviewPage() {
           Every external account, both projects. Days are London days; today is {dayLabel(today)}.
         </p>
       </div>
+      <BasketAlerts items={flaggedItems(rows)} />
       {projects.map((p) => {
         const projectRows = rows.filter((r) => r.project_id === p.id);
         return (

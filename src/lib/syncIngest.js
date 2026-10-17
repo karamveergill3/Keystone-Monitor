@@ -7,6 +7,13 @@
 // EA only moves its own watermark on a 200, so a failed sync is simply sent
 // again next time. Each write is safe to repeat, and the open positions are
 // replaced in one transaction, so nothing is ever half recorded.
+//
+// Basket tracking happens inside that same transaction
+// (sync_open_positions in schema.sql), which keeps two overlapping syncs
+// for one account from tracking one's baskets against the other's
+// positions. It is derived data, so the database undoes only the tracking
+// if that fails, logs it, and still stores the snapshot: a fault there
+// never stops the account syncing, and the next good sync puts it right.
 
 import { bearerKey, hashSyncKey } from "./syncKeys.js";
 import { parseSyncPayload, SyncPayloadError, MAX_BODY_BYTES } from "./syncPayload.js";
@@ -14,6 +21,12 @@ import { nextDrawdown } from "./drawdown.js";
 
 export const SAMPLE_EVERY_MS = 15 * 60_000;
 const INSERT_CHUNK = 500;
+
+// MAX_OPEN in public/ea/KeystoneSync.mq5: the most open positions the EA
+// lists. A list this long may have been cut short, so it is never taken as
+// the terminal's whole list. MAX_OPEN_PER_SYNC in syncPayload.js is the
+// parser's own cap, which only has to be at least this.
+export const EA_MAX_OPEN = 500;
 
 // How often the EA should sync, sent back on every response so it can be
 // changed without touching a terminal. Two minutes keeps a dozen terminals
@@ -131,26 +144,38 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
     const { error } = await db
       .from("equity_samples")
       .upsert(
-        [{ account_id: account.id, at: nowIso, balance: a.balance, equity: a.equity }],
+        [{ account_id: account.id, at: nowIso, balance: a.balance, equity: a.equity, credit: a.credit ?? 0 }],
         { onConflict: "account_id,at", ignoreDuplicates: true }
       );
     if (error) throw new Error(`equity sample failed: ${error.message}`);
   }
 
   // Open positions are a snapshot, replaced whole: whatever is not in this
-  // sync has been closed. One database call does the delete and the insert
-  // in a single transaction (replace_open_positions in schema.sql), so a
-  // failure keeps the previous snapshot rather than leaving none. Every row
-  // is stamped with this sync's time, the same as last_sync_at below. An EA
-  // too old to report positions sends no list (null), and the rows are left
-  // as they are rather than wiped.
+  // sync has been closed. One database call does the delete, the insert
+  // and the basket tracking in a single transaction (sync_open_positions in
+  // schema.sql), so a failure keeps the previous snapshot rather than
+  // leaving none, and a sync older than the snapshot already stored, which
+  // arrived late behind a newer one, changes nothing. Every row is stamped
+  // with this sync's time, the same as last_sync_at below. An EA too old to
+  // report positions sends no list (null), and the rows are left as they
+  // are rather than wiped.
+  //
+  // Baskets close only on a complete list. One shorter than the terminal's
+  // own count means a position opened or closed between the EA's two
+  // reads, and one at the EA's cap may have been cut short; closing on
+  // either could end a basket that is still open and lose its worst
+  // reading.
   if (Array.isArray(payload.open)) {
-    const { error } = await db.rpc("replace_open_positions", {
+    const n = payload.open.length;
+    const complete = n < EA_MAX_OPEN && Number.isInteger(a.open_positions) && n >= a.open_positions;
+    const { error } = await db.rpc("sync_open_positions", {
       p_account: account.id,
       p_rows: payload.open,
       p_at: nowIso,
+      p_balance: a.balance,
+      p_complete: complete,
     });
-    if (error) throw new Error(`open positions replace failed: ${error.message}`);
+    if (error) throw new Error(`open positions sync failed: ${error.message}`);
   }
 
   const update = {

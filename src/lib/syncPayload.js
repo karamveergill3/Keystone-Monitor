@@ -9,8 +9,9 @@
 import { normaliseType, normaliseEntry, kindOf } from "./dealKinds.js";
 
 export const MAX_DEALS_PER_SYNC = 1000;
-// The EA sends at most 200 open positions; this leaves room for a later
-// EA to send more without being refused.
+// The parser's own cap. The EA sends at most its MAX_OPEN (500 today,
+// EA_MAX_OPEN in syncIngest.js); this is never below it, so a big grid
+// is never refused, and can be raised for a later EA that sends more.
 export const MAX_OPEN_PER_SYNC = 500;
 export const MAX_BODY_BYTES = 2_000_000;
 
@@ -100,6 +101,11 @@ function parseOpenPosition(p, i, now) {
   if (!p || typeof p !== "object" || Array.isArray(p)) fail(`${at} is not an object`);
   return {
     ticket: digits(p.ticket, `${at}.ticket`),
+    // POSITION_IDENTIFIER, which links the position to its deals. An EA
+    // older than 2026.10.17.4 does not send it.
+    position_id: p.position_id === undefined || p.position_id === null
+      ? null
+      : digits(p.position_id, `${at}.position_id`),
     symbol: str(p.symbol, 40),
     side: p.side === "buy" || p.side === "sell" ? p.side : null,
     volume: num(p.volume, `${at}.volume`),

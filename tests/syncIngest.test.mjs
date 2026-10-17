@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ingestSync, syncIntervalSec } from "@/lib/syncIngest";
+import { ingestSync, syncIntervalSec, EA_MAX_OPEN } from "@/lib/syncIngest";
 import { generateSyncKey, hashSyncKey } from "@/lib/syncKeys";
+import { parseSyncPayload } from "@/lib/syncPayload";
 import { payload } from "./fixtures.mjs";
 
 // Just the parts of supabase-js that ingestSync uses, over plain maps.
@@ -12,6 +13,8 @@ function fakeDb() {
   const samples = [];
   // Keyed account_id:ticket, the table's primary key.
   const open = new Map();
+  // Every rpc made, in order, as [name, args].
+  const calls = [];
 
   function from(table) {
     const q = { table, filters: [] };
@@ -66,10 +69,14 @@ function fakeDb() {
     return api;
   }
 
-  // replace_open_positions from schema.sql: all of an account's rows out
-  // and the new ones in, or, on any error, nothing changed at all.
+  // sync_open_positions from schema.sql, its replace part: all of an
+  // account's rows out and the new ones in, or, on any error, nothing
+  // changed at all. The rest (the stale-sync skip and the basket tracking)
+  // is tested against real Postgres in schema.test.mjs; here every call is
+  // recorded.
   async function rpc(name, args) {
-    if (name !== "replace_open_positions") throw new Error(`fake db: unhandled rpc ${name}`);
+    calls.push([name, args]);
+    if (name !== "sync_open_positions") throw new Error(`fake db: unhandled rpc ${name}`);
     const { p_account: accountId, p_rows: rows, p_at: at } = args;
     const ids = rows.map((r) => `${accountId}:${r.ticket}`);
     if (new Set(ids).size !== ids.length) {
@@ -80,14 +87,14 @@ function fakeDb() {
     return { data: null, error: null };
   }
 
-  return { from, rpc, accounts, keys, deals, samples, open };
+  return { from, rpc, accounts, keys, deals, samples, open, calls };
 }
 
-// The columns replace_open_positions reads out of each row; anything else
+// The columns sync_open_positions reads out of each row; anything else
 // in a row is dropped, as jsonb_to_recordset drops it.
 const OPEN_COLUMNS = [
   "ticket", "symbol", "side", "volume", "open_price", "current_price", "sl", "tp",
-  "swap", "profit", "open_time", "magic", "comment",
+  "swap", "profit", "open_time", "magic", "comment", "position_id",
 ];
 
 function pick(obj, keys) {
@@ -267,18 +274,101 @@ test("a failed open positions replace is a 500 the EA retries, and keeps the las
   await sync(db, key, payload());
   const before = { ...db.accounts.get("acc-1") };
 
-  // The replace is one call, so it either happens whole or not at all: the
+  // The sync is one call, so it either happens whole or not at all: the
   // positions from the last good sync stay, and the account row (its
   // position count and last_sync_at) still matches them.
   db.rpc = async () => ({ data: null, error: { message: "statement timeout" } });
   const [, eur] = payload().open;
   await assert.rejects(
     sync(db, key, payload({ open: [eur] }), T0 + 60_000),
-    /open positions replace failed: statement timeout/
+    /open positions sync failed: statement timeout/
   );
   assert.deepEqual(openTickets(db), ["1004", "1005"]);
   assert.equal(db.open.get("acc-1:1004").updated_at, new Date(T0).toISOString());
   assert.deepEqual(db.accounts.get("acc-1"), before);
+});
+
+test("the open positions and their baskets go to the database in one call", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  assert.deepEqual(db.calls.map(([name]) => name), ["sync_open_positions"]);
+  const [, args] = db.calls[0];
+  assert.deepEqual(args, {
+    p_account: "acc-1",
+    // What the parser made of the EA's list, as sent.
+    p_rows: parseSyncPayload(payload(), T0).open,
+    p_at: new Date(T0).toISOString(),
+    p_balance: 10_000,
+    p_complete: true,
+  });
+  // The same instant as the account's last_sync_at.
+  assert.equal(args.p_at, db.accounts.get("acc-1").last_sync_at);
+  assert.equal(db.open.get("acc-1:1004").position_id, "1004");
+});
+
+test("baskets are only closed on a list that is the terminal's whole list", async () => {
+  // Shorter than the terminal's own count: a position changed between the
+  // EA's two reads.
+  const { db, key } = setup();
+  const [xau] = payload().open;
+  await sync(db, key, payload({ open: [xau] }));
+  assert.equal(db.calls.at(-1)[1].p_complete, false);
+
+  // The EA's cap reached: the list may have been cut short.
+  const full = Array.from({ length: EA_MAX_OPEN }, (_, i) => ({ ...xau, ticket: String(5000 + i), position_id: String(5000 + i) }));
+  const big = payload({ open: full });
+  big.account.positions = EA_MAX_OPEN;
+  await sync(db, key, big, T0 + 60_000);
+  assert.equal(db.calls.at(-1)[1].p_complete, false);
+
+  // One short of the cap and matching the count is complete; so is
+  // nothing open when the terminal says nothing is open.
+  const most = payload({ open: full.slice(1) });
+  most.account.positions = EA_MAX_OPEN - 1;
+  await sync(db, key, most, T0 + 120_000);
+  assert.equal(db.calls.at(-1)[1].p_complete, true);
+  const none = payload({ open: [] });
+  none.account.positions = 0;
+  await sync(db, key, none, T0 + 180_000);
+  assert.equal(db.calls.at(-1)[1].p_complete, true);
+});
+
+test("a sync_open_positions call that throws is a 500 too, with nothing after it stored", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  const before = { ...db.accounts.get("acc-1") };
+  db.rpc = async () => {
+    throw new Error("fetch failed");
+  };
+  await assert.rejects(sync(db, key, payload(), T0 + 60_000), /fetch failed/);
+  assert.deepEqual(db.accounts.get("acc-1"), before);
+  assert.deepEqual(openTickets(db), ["1004", "1005"]);
+});
+
+test("an EA that does not report positions tracks no baskets", async () => {
+  const { db, key } = setup();
+  const old = payload({ ea: "2026.10.17" });
+  delete old.open;
+  await sync(db, key, old);
+  assert.deepEqual(db.calls, []);
+});
+
+test("each equity sample carries the account's broker credit", async () => {
+  const { db, key } = setup();
+  const p = payload();
+  p.account.credit = 250;
+  p.account.equity = 10_200.5;
+  await sync(db, key, p);
+  assert.deepEqual(db.samples, [
+    { account_id: "acc-1", at: new Date(T0).toISOString(), balance: 10_000, equity: 10_200.5, credit: 250 },
+  ]);
+
+  // No credit reported: 0, never missing.
+  const none = payload();
+  delete none.account.credit;
+  await sync(db, key, none, T0 + 16 * 60_000);
+  assert.equal(db.samples.length, 2);
+  assert.equal(db.samples[1].credit, 0);
 });
 
 test("every open position row carries the time of the sync that sent it", async () => {

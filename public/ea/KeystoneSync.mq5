@@ -22,7 +22,7 @@
 #property version     "1.00"
 #property description "Read-only: reports balance, equity, open positions and deals to Keystone Monitor. Never trades."
 
-#define EA_VERSION          "2026.10.17.3"
+#define EA_VERSION          "2026.10.17.4"
 #define PAGE_SIZE           500
 #define MAX_PAGES_PER_TICK  20
 #define TICK_SECONDS        5
@@ -242,10 +242,13 @@ string BuildAccount()
   }
 
 // The positions open right now, at most MAX_OPEN, as a JSON list. Sent in
-// full on every sync: the server replaces its copy with this one.
-// PositionGetTicket() only selects a position so its fields can be read;
-// nothing here changes it. Open times are broker server time, converted
-// to UTC with the same offset as the deals.
+// full on every sync: the server replaces its copy with this one, and
+// groups it into baskets (symbol and side) to track each basket's floating
+// drawdown. position_id is POSITION_IDENTIFIER, the number the position's
+// deals carry as DEAL_POSITION_ID, so a basket's closed deals can be found
+// later. PositionGetTicket() only selects a position so its fields can be
+// read; nothing here changes it. Open times are broker server time,
+// converted to UTC with the same offset as the deals.
 string BuildOpen()
   {
    int total = PositionsTotal();
@@ -267,6 +270,7 @@ string BuildOpen()
       if(n > 0)
          json += ",";
       json += "{\"ticket\":\"" + StringFormat("%I64u", t) + "\""
+            + ",\"position_id\":\"" + IntegerToString(PositionGetInteger(POSITION_IDENTIFIER)) + "\""
             + ",\"symbol\":\"" + JsonEscape(PositionGetString(POSITION_SYMBOL)) + "\""
             + ",\"side\":\"" + side + "\""
             + ",\"volume\":" + Num(PositionGetDouble(POSITION_VOLUME), 4)

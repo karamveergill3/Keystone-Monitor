@@ -3,7 +3,7 @@
 export function payload(overrides = {}) {
   return {
     v: 1,
-    ea: "2026.10.17.3",
+    ea: "2026.10.17.4",
     account: {
       login: "51234567",
       server: "Broker-Live",
@@ -38,12 +38,12 @@ export function payload(overrides = {}) {
     ],
     open: [
       {
-        ticket: "1004", symbol: "XAUUSD", side: "buy", volume: 0.2, open_price: 2660.5, current_price: 2658.1,
+        ticket: "1004", position_id: "1004", symbol: "XAUUSD", side: "buy", volume: 0.2, open_price: 2660.5, current_price: 2658.1,
         sl: 2640, tp: 2700, swap: -0.5, profit: -48, open_time: "2026-10-03T07:30:00.123Z", magic: 100,
         comment: "grid 1",
       },
       {
-        ticket: "1005", symbol: "EURUSD", side: "sell", volume: 0.1, open_price: 1.0921, current_price: 1.0922,
+        ticket: "1005", position_id: "1005", symbol: "EURUSD", side: "sell", volume: 0.1, open_price: 1.0921, current_price: 1.0922,
         sl: 0, tp: 0, swap: 0, profit: -1, open_time: "2026-10-03T08:00:00.000Z", magic: 0, comment: "",
       },
     ],

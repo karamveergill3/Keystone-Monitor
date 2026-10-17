@@ -3,22 +3,28 @@ import { notFound } from "next/navigation";
 import StatTile from "@/components/StatTile";
 import StatusDot from "@/components/StatusDot";
 import Pnl from "@/components/Pnl";
-import TimeChart from "@/components/TimeChart";
+import EquityChart from "@/components/EquityChart";
+import BalanceChart from "@/components/BalanceChart";
 import PnlCalendar from "@/components/PnlCalendar";
 import PeriodTable from "@/components/PeriodTable";
 import PositionsTable from "@/components/PositionsTable";
 import OpenPositionsTable from "@/components/OpenPositionsTable";
+import BasketsTable from "@/components/BasketsTable";
+import ClosedBasketsTable from "@/components/ClosedBasketsTable";
 import ReportForm from "@/components/ReportForm";
 import { db } from "@/lib/db";
-import { getAccount, listProjects, dailyFor, positionsPage, equitySamples, openPositions } from "@/lib/data";
+import { getAccount, listProjects, dailyFor, positionsPage, equitySamples, openPositions, openBasketsFor, closedBaskets } from "@/lib/data";
 import { accountRow } from "@/lib/accountView";
 import { summarise, dailyReturns, groupPeriods } from "@/lib/accountStats";
-import { todayKey, monthStart, addMonths, londonMidnight } from "@/lib/days";
+import { accountBaskets } from "@/lib/baskets";
+import { equityPoints, balancePoints } from "@/lib/chartSeries";
+import { todayKey, monthStart, addMonths } from "@/lib/days";
 import { money, pct, number, ago, londonTime, dayLabel } from "@/lib/format";
 import { hrefWith, pageNumber } from "@/lib/query";
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 const EQUITY_DAYS = 30;
+const BASKETS_PAGE_SIZE = 5;
 const VIEWS = ["calendar", "weeks", "months"];
 
 export async function generateMetadata({ params }) {
@@ -40,13 +46,16 @@ export default async function AccountPage({ params, searchParams }) {
   const view = VIEWS.includes(query.view) ? query.view : "calendar";
   const month = /^\d{4}-\d{2}$/.test(query.month ?? "") && `${query.month}-01` <= today ? `${query.month}-01` : monthStart(today);
   const page = pageNumber(query.page);
+  const basketPage = pageNumber(query.bpage);
 
-  const [projects, dailyMap, positions, samples, open] = await Promise.all([
+  const [projects, dailyMap, positions, samples, open, trackedMap, closed] = await Promise.all([
     listProjects(supabase),
     dailyFor(supabase, [account.id]),
     positionsPage(supabase, account.id, { page, pageSize: PAGE_SIZE }),
     equitySamples(supabase, account.id, EQUITY_DAYS),
     openPositions(supabase, account.id),
+    openBasketsFor(supabase, [account.id]),
+    closedBaskets(supabase, account.id, { page: basketPage, pageSize: BASKETS_PAGE_SIZE }),
   ]);
   const project = projects.find((p) => p.id === account.project_id);
   const daily = dailyMap.get(account.id) ?? [];
@@ -54,10 +63,11 @@ export default async function AccountPage({ params, searchParams }) {
   const c = row.currency;
   const all = summarise(daily, row.balance);
   const returns = dailyReturns(daily, row.balance);
+  const baskets = accountBaskets({ rows: open, account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(account.id) ?? [] });
 
   const path = `/accounts/${account.id}`;
-  const balancePoints = returns.map((r) => ({ t: londonMidnight(r.day).getTime() + 86_399_000, a: r.endBalance }));
-  const equityPoints = samples.map((s) => ({ t: Date.parse(s.at), a: Number(s.balance), b: Number(s.equity) }));
+  const balanceSeries = balancePoints(returns);
+  const equity = equityPoints(samples);
   const nextMonth = addMonths(month, 1);
 
   return (
@@ -117,17 +127,35 @@ export default async function AccountPage({ params, searchParams }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="hud rounded-md border border-line bg-panel p-4">
           <h2 className="mb-3 text-xs font-medium tracking-wider text-muted uppercase">Balance, every day with a deal</h2>
-          <TimeChart points={balancePoints} currency={c} aLabel="Balance" empty="No deals synced yet." />
+          <BalanceChart points={balanceSeries} currency={c} empty="No deals synced yet." />
         </section>
         <section className="hud rounded-md border border-line bg-panel p-4">
           <h2 className="mb-3 text-xs font-medium tracking-wider text-muted uppercase">Balance and equity, last {EQUITY_DAYS} days</h2>
-          <TimeChart points={equityPoints} currency={c} aLabel="Balance" bLabel="Equity" empty="Equity is sampled every 15 minutes once the EA is syncing." />
+          <EquityChart samples={equity.points} thinned={equity.thinned} currency={c} empty="Equity is sampled every 15 minutes once the EA is syncing." />
         </section>
       </div>
+
+      <section id="baskets" className="space-y-3">
+        <h2 className="text-base font-semibold">Open baskets</h2>
+        <BasketsTable view={baskets} currency={c} />
+      </section>
 
       <section className="space-y-3">
         <h2 className="text-base font-semibold">Open positions</h2>
         <OpenPositionsTable rows={open} account={account} currency={c} />
+      </section>
+
+      <section id="closed-baskets" className="space-y-3">
+        <ClosedBasketsTable
+          title="Closed baskets"
+          rows={closed.rows}
+          total={closed.total}
+          page={basketPage}
+          pageSize={BASKETS_PAGE_SIZE}
+          currency={c}
+          eaVersion={account.ea_version}
+          hrefForPage={(p) => hrefWith(path, query, { bpage: p === 1 ? null : p })}
+        />
       </section>
 
       <section className="space-y-3">
@@ -158,9 +186,9 @@ export default async function AccountPage({ params, searchParams }) {
         {view === "months" && <PeriodTable periods={groupPeriods(daily, row.balance, "month")} unit="month" currency={c} />}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold">Trade history</h2>
+      <section id="history" className="scroll-mt-24 space-y-3">
         <PositionsTable
+          title="Trade history"
           rows={positions.rows}
           total={positions.total}
           page={page}
