@@ -4,10 +4,20 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
-## 2026-10-17 (Claude Code, Mac): Open positions on the account page
+## 2026-10-17 (Claude Code, Mac): Pastel look, one-step terminal setup, open positions; all live
 
 ### What changed
 
+- A light pastel look: warm paper background, white panels, near-black
+  ink, pastel fills for profit, loss, warnings and each project; every
+  text colour at least 4.9:1 on its surface; IBM Plex Sans, self-hosted;
+  small text one step larger (tokens in `src/app/globals.css`).
+- Right after a key is made, the admin screen offers **Download the EA for
+  <account>**: the EA with that account's SyncUrl and SyncKey filled in as
+  its inputs (`src/lib/eaFile.js`), beside numbered terminal steps and the
+  WebRequest address with a Copy button. Nothing is typed at the terminal.
+- `next.config.mjs` turns off Turbopack's on-disk build cache: Vercel
+  restored it and the first restyle deploy kept the old stylesheet.
 - The EA (2026.10.17.2) now sends every open position, up to 200, on each
   sync: ticket, symbol, side, lots, open and current price, SL, TP, swap,
   profit, open time (UTC, same offset as deals), magic and comment.
@@ -36,16 +46,18 @@ along with the margin figures the EA already sent.
 
 ### Watch out
 
-- **Run `supabase/schema.sql` on the live database before this reaches
-  `main`.** Until the table and `replace_open_positions()` exist the account
-  page fails its read and a new EA's syncs get a 500 (old EAs keep
-  syncing).
+- The `open_positions` table and `replace_open_positions()` were added to
+  the live database before this was pushed (checked: RLS on, execute for
+  service_role only, no browser grants). Run `schema.sql` again after any
+  change to it, as before.
 - `OPEN_POSITIONS_EA` in `src/lib/openPositions.js` is the first EA build
   that lists positions. Later builds compare above it; a test checks the
   EA's own `EA_VERSION` does.
 - MQL5 cannot be compiled here. The new code uses only position reads
   (`PositionsTotal`, `PositionGetTicket`, `PositionGetString/Integer/Double`),
-  but compile it once in MetaEditor before handing it out.
+  but compile it once in MetaEditor before handing it out. Terminals on the
+  older EA keep syncing; they just do not list open positions until they
+  get the new file (New key, then download).
 
 ### Still needs a human
 
