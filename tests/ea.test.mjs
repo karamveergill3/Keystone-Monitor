@@ -1,0 +1,49 @@
+// The MT5 EA cannot be compiled here, so these pin what can be checked
+// from its source: that it never trades, and that it sends what the server
+// reads.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { payload } from "./fixtures.mjs";
+import { KEY_PREFIX } from "@/lib/syncKeys";
+
+const EA = readFileSync(new URL("../public/ea/PartnerSync.mq5", import.meta.url), "utf8");
+const code = EA.replace(/\/\/.*$/gm, "");
+
+test("the EA has no way to trade", () => {
+  const forbidden = [
+    /\bOrderSend(Async)?\s*\(/,
+    /\bOrderCheck\s*\(/,
+    /\bCTrade\b/,
+    /\bCPositionInfo\b/,
+    /#include\s*<Trade\//,
+    /\bPosition(Close|Modify|Open)\w*\s*\(/,
+    /\bTRADE_ACTION_/,
+  ];
+  for (const re of forbidden) assert.doesNotMatch(code, re, `found ${re}`);
+});
+
+test("the EA is plain ASCII, which MetaEditor always reads correctly", () => {
+  assert.doesNotMatch(EA, /[^\x00-\x7f]/);
+});
+
+test("every field the server reads is one the EA sends", () => {
+  const sent = new Set([...code.matchAll(/\\"(\w+)\\":/g)].map((m) => m[1]));
+  const p = payload();
+  const expected = [
+    ...Object.keys(p).filter((k) => k !== "ea" && k !== "v"),
+    "v",
+    "ea",
+    ...Object.keys(p.account),
+    ...Object.keys(p.deals[0]),
+  ];
+  for (const k of expected) assert.ok(sent.has(k), `EA does not send "${k}"`);
+});
+
+test("the EA authenticates the way the server expects", () => {
+  assert.match(code, /Authorization: Bearer " \+ SyncKey/);
+  assert.match(code, new RegExp(`StringFind\\(SyncKey, "${KEY_PREFIX}"\\)`));
+  assert.match(code, /input string SyncUrl/);
+  assert.match(code, /input string SyncKey/);
+});

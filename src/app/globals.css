@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+/* Every colour in the app is one of these. New colours go here, not as
+   one-off hex values in a component. */
+@theme {
+  --color-bg: #0b1020;
+  --color-panel: #121a2e;
+  --color-panel-2: #18223a;
+  --color-line: #24304d;
+  --color-ink: #e7ecf6;
+  --color-muted: #8d99b3;
+  --color-accent: #5b8cff;
+  --color-up: #2fbf71;
+  --color-down: #f0555a;
+  --color-warn: #f2b84b;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8);
+}
