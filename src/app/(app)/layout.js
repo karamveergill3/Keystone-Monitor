@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { adminSignOut } from "@/app/(auth)/admin/login/actions";
+import LogoMark from "@/components/LogoMark";
 import { isAdmin } from "@/lib/access";
 import { listProjects } from "@/lib/data";
 import { db } from "@/lib/db";
@@ -16,12 +17,7 @@ export default async function AppLayout({ children }) {
       <header className="border-b border-line bg-panel">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3.5">
           <Link href="/" className="flex items-center gap-2.5 text-base font-semibold">
-            <span aria-hidden className="grid h-6 w-6 grid-cols-2 gap-0.5 rounded-md bg-panel-2 p-1">
-              <span className="rounded-sm bg-series-1/70" />
-              <span className="rounded-sm bg-up/50" />
-              <span className="rounded-sm bg-warn/40" />
-              <span className="rounded-sm bg-series-2/60" />
-            </span>
+            <LogoMark className="h-8 w-8" />
             {APP_NAME}
           </Link>
           <nav className="flex flex-wrap gap-1 text-sm text-muted">

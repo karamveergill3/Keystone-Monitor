@@ -1,0 +1,47 @@
+// The Keystone Monitor mark: a winged keystone with a neon edge and a
+// magenta needle, on a black rounded tile. src/app/icon.svg is the same
+// markup (tests/logo.test.mjs keeps the two identical), and the phone
+// home-screen icon is drawn from it in src/app/apple-icon.js. The owner's
+// original artwork is public/brand/keystone-logo-original.png.
+
+export const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-19 68 600 600">
+  <defs>
+    <linearGradient id="km-edge" gradientUnits="userSpaceOnUse" x1="0" y1="186" x2="0" y2="556">
+      <stop offset="0" stop-color="#00ffd2"/>
+      <stop offset="0.27" stop-color="#b8fff8"/>
+      <stop offset="0.4" stop-color="#f4fff8"/>
+      <stop offset="0.66" stop-color="#5cfffa"/>
+      <stop offset="0.8" stop-color="#e6b8ee"/>
+      <stop offset="1" stop-color="#ff2fe0"/>
+    </linearGradient>
+    <linearGradient id="km-needle" gradientUnits="userSpaceOnUse" x1="0" y1="92" x2="0" y2="376">
+      <stop offset="0" stop-color="#e800cc"/>
+      <stop offset="0.75" stop-color="#ff33e8"/>
+      <stop offset="1" stop-color="#ff33e8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="km-wing" gradientUnits="userSpaceOnUse" x1="0" y1="160" x2="0" y2="556">
+      <stop offset="0" stop-color="#1c1c1c"/>
+      <stop offset="1" stop-color="#121212"/>
+    </linearGradient>
+    <filter id="km-glow" x="-40%" y="-20%" width="180%" height="140%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+  <rect x="-19" y="68" width="600" height="600" rx="120" fill="#000"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round" filter="url(#km-glow)">
+    <path d="M214 330 L214 470 M348 330 L348 470" stroke="#16c947" stroke-width="30" opacity="0.75"/>
+    <path d="M123 189 L214 318 L214 482 L281 553 L348 482 L348 318 L439 189" stroke="url(#km-edge)" stroke-width="16" opacity="0.6"/>
+    <path d="M281 92 L281 372 M281 556 L281 645" stroke="#ff1fd6" stroke-width="16" opacity="0.6"/>
+  </g>
+  <path d="M100 160 L271 290 L291 290 L462 160 L348 318 L348 482 L281 556 L214 482 L214 318 Z" fill="url(#km-wing)"/>
+  <rect x="270" y="292" width="21" height="212" rx="10.5" fill="#030303"/>
+  <path d="M100 160 L271 290 M462 160 L291 290" fill="none" stroke="#a9b3af" stroke-width="2" opacity="0.6"/>
+  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M123 189 L214 318 L214 482 L281 553 L348 482 L348 318 L439 189" stroke="url(#km-edge)" stroke-width="7"/>
+    <path d="M281 92 L281 376" stroke="url(#km-needle)" stroke-width="4.5"/>
+    <path d="M281 556 L281 645" stroke="#f00ad8" stroke-width="4.5"/>
+  </g>
+</svg>`;
+
+// Full bleed for the phone home screen: iOS rounds the corners itself.
+export const LOGO_SVG_SQUARE = LOGO_SVG.replace('rx="120" ', "");
