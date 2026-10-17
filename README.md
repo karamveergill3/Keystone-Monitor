@@ -52,6 +52,11 @@ right even if a terminal only ever sent part of its history.
 
 ## Setting it up
 
+These steps are for a fresh install somewhere new. **The live deployment
+already has its Supabase project and schema:** do not create a second
+project. What is still pending for it is in `docs/handoff.md`, and
+`docs/SETUP-PROMPT.md` does it in a browser.
+
 ### 1. Supabase
 
 1. Create a new project.
