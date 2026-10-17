@@ -35,11 +35,15 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
           <div key={d} className="px-1.5 pb-1 font-medium text-muted">{d}</div>
         ))}
         {cells.map((d) => {
-          const r = byDay.get(d);
           const inMonth = d >= first && d <= last;
-          const tone = !r || r.tradePnl === 0 ? "border border-line/70" : r.tradePnl > 0 ? "border border-up/30 bg-up-soft" : "border border-down/30 bg-down-soft";
+          // Days from the months either side show only their date: their
+          // figures belong to, and are readable in, their own month.
+          const r = inMonth ? byDay.get(d) : null;
+          const tone = !inMonth
+            ? "border border-dashed border-line"
+            : !r || r.tradePnl === 0 ? "border border-line/70" : r.tradePnl > 0 ? "border border-up/30 bg-up-soft" : "border border-down/30 bg-down-soft";
           return (
-            <div key={d} className={`min-h-[4.5rem] min-w-0 rounded-md p-2 [overflow-wrap:anywhere] ${tone} ${inMonth ? "" : "opacity-35"}`}>
+            <div key={d} className={`min-h-[4.5rem] min-w-0 rounded-md p-2 [overflow-wrap:anywhere] ${tone}`}>
               <p className="text-muted">{Number(d.slice(8))}</p>
               {r && r.tradePnl !== 0 && (
                 <>

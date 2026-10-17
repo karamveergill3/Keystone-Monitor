@@ -4,14 +4,20 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
-## 2026-10-17 (Claude Code, Mac): Pastel look, one-step terminal setup, open positions; all live
+## 2026-10-17 (Claude Code, Mac): Logo, pastel-futuristic look, one-step terminal setup, open positions; all live
 
 ### What changed
 
-- A light pastel look: warm paper background, white panels, near-black
-  ink, pastel fills for profit, loss, warnings and each project; every
-  text colour at least 4.9:1 on its surface; IBM Plex Sans, self-hosted;
-  small text one step larger (tokens in `src/app/globals.css`).
+- A pastel, futuristic look to go with the logo: a cool light base with a
+  faint grid and pastel cyan/pink haze, a holographic rule under the
+  header, HUD corner brackets (`.hud`), Space Grotesk with figures in
+  JetBrains Mono, teal and orchid chart lines; every text colour at least
+  5:1 on its surface (tokens in `src/app/globals.css`). Sync status is a
+  filled dot, a hollow ring (offline) or a dashed ring (waiting), so it
+  reads without colour.
+- The logo (`src/lib/logo.js`, `src/app/icon.svg`, `src/app/apple-icon.js`)
+  is the owner's neon winged keystone, redrawn as SVG; the original is in
+  `public/brand`.
 - Right after a key is made, the admin screen offers **Download the EA for
   <account>**: the EA with that account's SyncUrl and SyncKey filled in as
   its inputs (`src/lib/eaFile.js`), beside numbered terminal steps and the

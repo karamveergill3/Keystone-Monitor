@@ -5,7 +5,8 @@
 
    Pastel and futuristic, after the logo: a cool light base, pastel cyan,
    pink and lilac fills, deep indigo ink. Pastels are for fills; every text
-   colour is at least 4.9:1 against bg, panel, panel-2 and every soft fill. */
+   colour is at least 5:1 against bg, panel, panel-2 and every soft fill
+   (the closest is magenta at 5.2:1). */
 @theme {
   --color-bg: #f4f6fb;
   --color-panel: #ffffff;
@@ -15,10 +16,10 @@
   --color-line-strong: #7d87ad;
   --color-ink: #1d2140;
   --color-muted: #555d7e;
-  --color-accent: #08706a;
+  --color-accent: #076a64;
   --color-accent-soft: #d9f7f3;
   --color-magenta: #a8298a;
-  --color-up: #11764f;
+  --color-up: #0f6c48;
   --color-up-soft: #dcf6ea;
   --color-down: #b52a57;
   --color-down-soft: #fde4ec;
