@@ -9,7 +9,7 @@ export default function TimeChart({ points, currency = "USD", aLabel, bLabel, em
   if (!points?.length) {
     return <div className="flex h-56 items-center justify-center text-sm text-muted">{empty}</div>;
   }
-  const money = new Intl.NumberFormat("en-GB", { style: "currency", currency, maximumFractionDigits: 0 });
+  const money = new Intl.NumberFormat("en-GB", { style: "currency", currency, currencyDisplay: "narrowSymbol", maximumFractionDigits: 0 });
   const date = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "Europe/London" });
   const full = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/London" });
 

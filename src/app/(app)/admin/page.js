@@ -41,7 +41,7 @@ export default async function AdminPage() {
           <a href="/ea/PartnerSync.mq5" download className="text-sm text-accent hover:underline">Download the MT5 EA</a>
         </div>
         <AddAccountForm projects={projects} />
-        <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+        <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
           <table className="w-full min-w-[960px] text-sm">
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-line">
@@ -132,7 +132,7 @@ export default async function AdminPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold">Partners</h2>
         <InviteForm />
-        <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+        <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
           <table className="w-full min-w-[820px] text-sm">
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-line">

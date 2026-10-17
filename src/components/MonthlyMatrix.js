@@ -7,7 +7,7 @@ import { monthLabel } from "@/lib/format";
 export default function MonthlyMatrix({ rows, months }) {
   if (!rows.length) return null;
   return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+    <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
       <table className="w-full min-w-[720px] text-sm">
         <thead className="text-xs text-muted">
           <tr className="border-b border-line">

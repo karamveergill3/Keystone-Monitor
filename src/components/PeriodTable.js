@@ -7,7 +7,7 @@ export default function PeriodTable({ periods, unit, currency }) {
   if (!periods.length) return <p className="rounded-lg border border-line bg-panel p-6 text-sm text-muted">No trading yet.</p>;
   const label = (k) => (unit === "month" ? monthLabel(k) : `w/c ${dayLabel(k)}`);
   return (
-    <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+    <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
       <table className="w-full min-w-[560px] text-sm">
         <thead className="text-xs text-muted">
           <tr className="border-b border-line">

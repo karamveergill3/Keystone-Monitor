@@ -7,7 +7,7 @@ export default function PositionsTable({ rows, total, page, pageSize, currency, 
   const pages = Math.max(1, Math.ceil(total / pageSize));
   return (
     <div className="space-y-2">
-      <div className="overflow-x-auto rounded-lg border border-line bg-panel">
+      <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
         <table className="w-full min-w-[820px] text-sm">
           <thead className="text-xs text-muted">
             <tr className="border-b border-line">
