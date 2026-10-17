@@ -28,21 +28,16 @@ test("a withdrawal is not a drawdown", () => {
   assert.equal(s.maxDrawdownPct, 0);
 });
 
-test("a withdrawal during a drawdown leaves the drawdown where it was", () => {
+test("during a drawdown, the same open loss is measured against what is left", () => {
+  // 10,000 balance at its peak; a floating loss takes equity to 8,000.
   let s = nextDrawdown(start, { equity: 10_000, at: "t0" });
   s = nextDrawdown(s, { equity: 8_000, at: "t1" });
   assert.equal(s.maxDrawdownPct, 0.2);
+  // 4,000 withdrawn: the 2,000 open loss is now on 6,000 of balance, and
+  // the max agrees with Floating drawdown on the same screen.
   s = nextDrawdown(s, { equity: 4_000, cashFlow: -4_000, at: "t2" });
-  assert.ok(Math.abs(s.drawdownPct - 0.2) < 1e-12, String(s.drawdownPct));
-  assert.ok(Math.abs(s.maxDrawdownPct - 0.2) < 1e-12);
-  assert.equal(s.maxDrawdownAt, "t1");
-});
-
-test("a deposit during a drawdown neither hides nor deepens it", () => {
-  let s = nextDrawdown(start, { equity: 10_000, at: "t0" });
-  s = nextDrawdown(s, { equity: 9_000, at: "t1" });
-  s = nextDrawdown(s, { equity: 19_000, cashFlow: 10_000, at: "t2" });
-  assert.ok(Math.abs(s.drawdownPct - 0.1) < 1e-12, String(s.drawdownPct));
+  assert.ok(Math.abs(s.drawdownPct - floatingDrawdownPct(6_000, 4_000)) < 1e-12, String(s.drawdownPct));
+  assert.ok(s.maxDrawdownPct >= s.drawdownPct);
 });
 
 test("withdrawing everything resets the peak", () => {

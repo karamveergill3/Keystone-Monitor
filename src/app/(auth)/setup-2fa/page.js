@@ -10,5 +10,12 @@ export default async function SetupTwoFactorPage() {
   if (s.state === "no-access") redirect("/no-access");
   if (s.state === "needs-code") redirect("/verify-2fa");
   if (s.state === "ok") redirect("/");
-  return <SetupTwoFactor />;
+  return (
+    <>
+      <SetupTwoFactor />
+      <form action="/auth/sign-out" method="post" className="mt-4 text-center">
+        <button type="submit" className="text-xs text-muted hover:text-ink">Not you? Sign out</button>
+      </form>
+    </>
+  );
 }

@@ -1,32 +1,24 @@
 // Equity drawdown, carried forward one sync at a time.
 //
-// The peak is the highest equity seen since tracking began, adjusted for
-// every deposit and withdrawal made after that. Without the adjustment,
-// taking money out would read as a loss of the same size, and the "max
-// drawdown" partners quote would be wrong forever after.
+// The peak is the highest equity seen since tracking began, moved by every
+// deposit and withdrawal made after that. Without the adjustment, taking
+// money out would read as a loss of the same size, and the "max drawdown"
+// partners quote would be wrong forever after.
 //
-// THE PEAK IS SCALED, NOT SHIFTED. Moving money in or out leaves the
-// account exactly as far below its peak, in percent, as it was. Shifting
-// the peak by the amount instead would turn a withdrawal made during a
-// drawdown into a deeper one: 10,000 peak, 8,000 equity (20%), withdraw
-// 4,000, and a shifted peak of 6,000 reads 33%. Grid accounts nearly
-// always carry floating loss, so that is most withdrawals.
+// THE PEAK MOVES BY THE AMOUNT, NOT IN PROPORTION, and that is a choice.
+// Withdrawing 4,000 from an account at 10,000 peak and 8,000 equity leaves
+// the same 2,000 open loss on 6,000 of capital: 33%, which is also exactly
+// what Floating drawdown shows on the same screen. Scaling the peak would
+// keep the max at 20% beside a floating figure of 33%, a max below the
+// drawdown happening right now. The time-weighted, flow-neutral measure is
+// the day-end drawdown in reports (maxDailyDrawdown in accountStats.js).
 //
 // Credit is taken off equity first: it is the broker's money, not the
 // account's, and it can be added or removed at will.
 
 export function nextDrawdown(prev, { equity, credit = 0, cashFlow = 0, at }) {
   const eq = equity - (credit ?? 0);
-  let peak;
-  if (prev.peak === null || prev.peak === undefined) {
-    peak = eq;
-  } else if (cashFlow) {
-    // Equity just before the money moved, assuming nothing else changed.
-    const before = eq - cashFlow;
-    peak = before > 0 ? Number(prev.peak) * (eq / before) : eq;
-  } else {
-    peak = Number(prev.peak);
-  }
+  let peak = prev.peak === null || prev.peak === undefined ? eq : Number(prev.peak) + cashFlow;
   if (eq > peak) peak = eq;
 
   const dd = peak > 0 ? Math.max(0, (peak - eq) / peak) : 0;

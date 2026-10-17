@@ -12,6 +12,7 @@ import "server-only";
 import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient, getSessionUser } from "@/lib/supabase/server";
+import { authStep } from "@/lib/authStep";
 
 // Returns { state, user, member, supabase } without redirecting, for route
 // handlers that answer with a status code instead.
@@ -28,9 +29,8 @@ export const memberState = cache(async () => {
   if (!member) return { state: "no-access", user };
 
   const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-  if (aal?.currentLevel !== "aal2") {
-    return { state: aal?.nextLevel === "aal2" ? "needs-code" : "needs-2fa-setup", user, member };
-  }
+  const step = authStep(aal?.currentLevel, user);
+  if (step !== "ok") return { state: step, user, member };
   return { state: "ok", user, member, supabase };
 });
 
