@@ -56,16 +56,19 @@ html {
   color-scheme: light;
 }
 
-/* A faint measuring grid with soft pastel haze behind it, the logo's
-   cyan and pink. Fixed, so it does not scroll with the page. */
+/* A pastel aurora behind everything: cyan, lilac, pink and mint glows
+   blending into the light base, with a very fine grain so it reads as
+   holographic rather than flat. Fixed, so it does not scroll with the
+   page. The grain is an inline SVG; the CSP allows data: images. */
 body {
   background-color: var(--color-bg);
   background-image:
-    radial-gradient(1100px 480px at 10% -14%, rgb(120 230 220 / 0.32), transparent 62%),
-    radial-gradient(900px 460px at 96% -10%, rgb(244 170 225 / 0.32), transparent 60%),
-    linear-gradient(rgb(110 120 190 / 0.07) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(110 120 190 / 0.07) 1px, transparent 1px);
-  background-size: auto, auto, 32px 32px, 32px 32px;
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23g)' opacity='0.05'/%3E%3C/svg%3E"),
+    radial-gradient(900px 620px at 6% -6%, rgb(140 236 224 / 0.45), transparent 65%),
+    radial-gradient(820px 560px at 96% 2%, rgb(246 178 226 / 0.42), transparent 62%),
+    radial-gradient(1000px 640px at 55% 108%, rgb(196 182 250 / 0.38), transparent 65%),
+    radial-gradient(700px 520px at -6% 78%, rgb(178 238 208 / 0.32), transparent 62%);
+  background-size: 160px 160px, auto, auto, auto, auto;
   background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
