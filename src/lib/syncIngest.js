@@ -38,6 +38,12 @@ export function syncIntervalSec(env = process.env) {
   return Math.min(600, Math.max(30, Math.round(v)));
 }
 
+const BROKER_LEVELS = ["stop_out_mode", "margin_call_level", "stop_out_level"];
+
+function brokerLevels(a) {
+  return Object.fromEntries(BROKER_LEVELS.filter((k) => a[k] !== null && a[k] !== undefined).map((k) => [k, a[k]]));
+}
+
 function reply(status, body) {
   return { status, body };
 }
@@ -164,7 +170,8 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
   // own count means a position opened or closed between the EA's two
   // reads, and one at the EA's cap may have been cut short; closing on
   // either could end a basket that is still open and lose its worst
-  // reading.
+  // reading. Each row's point_value goes with it (null from an EA older
+  // than 2026.10.17.5).
   if (Array.isArray(payload.open)) {
     const n = payload.open.length;
     const complete = n < EA_MAX_OPEN && Number.isInteger(a.open_positions) && n >= a.open_positions;
@@ -198,6 +205,10 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
     peak_equity: dd.peak,
     max_drawdown_pct: dd.maxDrawdownPct,
     max_drawdown_at: dd.maxDrawdownAt,
+    // The broker's levels, each only when this sync carries it: an EA older
+    // than 2026.10.17.5 does not send them, and must not wipe what a newer
+    // one stored (the levels rarely change).
+    ...brokerLevels(a),
     ...(sampleDue ? { last_sample_at: nowIso } : {}),
     ...(account.resync_requested ? { resync_requested: false } : {}),
   };

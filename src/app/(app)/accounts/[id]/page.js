@@ -12,11 +12,15 @@ import OpenPositionsTable from "@/components/OpenPositionsTable";
 import BasketsTable from "@/components/BasketsTable";
 import ClosedBasketsTable from "@/components/ClosedBasketsTable";
 import ReportForm from "@/components/ReportForm";
+import AttentionBanner from "@/components/AttentionBanner";
+import RiskPanel from "@/components/RiskPanel";
 import { db } from "@/lib/db";
 import { getAccount, listProjects, dailyFor, positionsPage, equitySamples, openPositions, openBasketsFor, closedBaskets } from "@/lib/data";
 import { accountRow } from "@/lib/accountView";
 import { summarise, dailyReturns, groupPeriods } from "@/lib/accountStats";
 import { accountBaskets } from "@/lib/baskets";
+import { accountRisk } from "@/lib/risk";
+import { accountAttention } from "@/lib/attention";
 import { equityPoints, balancePoints } from "@/lib/chartSeries";
 import { todayKey, monthStart, addMonths } from "@/lib/days";
 import { money, pct, number, ago, londonTime, dayLabel } from "@/lib/format";
@@ -64,6 +68,8 @@ export default async function AccountPage({ params, searchParams }) {
   const all = summarise(daily, row.balance);
   const returns = dailyReturns(daily, row.balance);
   const baskets = accountBaskets({ rows: open, account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(account.id) ?? [] });
+  const risk = accountRisk({ rows: open, account: row });
+  const attention = accountAttention({ row, baskets, risk });
 
   const path = `/accounts/${account.id}`;
   const balanceSeries = balancePoints(returns);
@@ -92,6 +98,8 @@ export default async function AccountPage({ params, searchParams }) {
           {account.ea_version && <p>EA {account.ea_version}</p>}
         </div>
       </div>
+
+      <AttentionBanner attention={attention} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Balance" sub={Number(account.credit) > 0 ? `Plus ${money(account.credit, c)} broker credit, not counted` : null}>
@@ -137,7 +145,12 @@ export default async function AccountPage({ params, searchParams }) {
 
       <section id="baskets" className="space-y-3">
         <h2 className="text-base font-semibold">Open baskets</h2>
-        <BasketsTable view={baskets} currency={c} />
+        <BasketsTable view={baskets} currency={c} risk={risk} />
+      </section>
+
+      <section id="risk" className="space-y-3">
+        <h2 className="text-base font-semibold">Margin and stop-out</h2>
+        <RiskPanel risk={risk} currency={c} />
       </section>
 
       <section className="space-y-3">

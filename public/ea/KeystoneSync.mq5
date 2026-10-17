@@ -1,10 +1,11 @@
 //+------------------------------------------------------------------+
 //|                                                 KeystoneSync.mq5 |
 //|                                                                  |
-//| READ-ONLY. Reports this account's balance, equity, margin, open  |
-//| positions and deals to Keystone Monitor. It never opens, changes |
-//| or closes a trade: there is no trading code in this file at all, |
-//| and a test in the repository fails if any is ever added.         |
+//| READ-ONLY. Reports this account's balance, equity, margin, the   |
+//| broker's margin call and stop-out levels, open positions and     |
+//| deals to Keystone Monitor. It never opens, changes or closes a   |
+//| trade: there is no trading code in this file at all, and a test  |
+//| in the repository fails if any is ever added.                    |
 //|                                                                  |
 //| Setup (once per terminal):                                       |
 //| 1. File -> Open Data Folder, then copy this file into            |
@@ -22,7 +23,7 @@
 #property version     "1.00"
 #property description "Read-only: reports balance, equity, open positions and deals to Keystone Monitor. Never trades."
 
-#define EA_VERSION          "2026.10.17.4"
+#define EA_VERSION          "2026.10.17.5"
 #define PAGE_SIZE           500
 #define MAX_PAGES_PER_TICK  20
 #define TICK_SECONDS        5
@@ -238,7 +239,30 @@ string BuildAccount()
           + ",\"margin_level\":" + Num(AccountInfoDouble(ACCOUNT_MARGIN_LEVEL), 2)
           + ",\"positions\":" + IntegerToString(PositionsTotal())
           + ",\"floating\":" + Num(AccountInfoDouble(ACCOUNT_PROFIT), 2)
+          // The broker's margin call and stop-out levels, so the site can
+          // say how far price can move before either. so_mode says what
+          // they are in: 0 a margin level percentage, 1 equity in money.
+          + ",\"so_mode\":" + IntegerToString(AccountInfoInteger(ACCOUNT_MARGIN_SO_MODE))
+          + ",\"margin_call\":" + Num(AccountInfoDouble(ACCOUNT_MARGIN_SO_CALL), 2)
+          + ",\"stop_out\":" + Num(AccountInfoDouble(ACCOUNT_MARGIN_SO_SO), 2)
           + "}";
+  }
+
+// What a 1.0 move in symbol's price costs or makes on 1 lot, in the
+// account's currency: the value of one losing tick over the tick's size.
+// The losing tick, because the site uses it to say how far price can go
+// against a basket before stop-out. 0 when the terminal cannot say (no
+// tick size or tick value yet, before the symbol's first quote). Never
+// below 0: the server refuses a negative one, and with it the whole sync.
+double PointValue(string symbol)
+  {
+   double size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   if(size <= 0)
+      return 0;
+   double v = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE_LOSS) / size;
+   if(!MathIsValidNumber(v) || v < 0)
+      return 0;
+   return v;
   }
 
 // The positions open right now, at most MAX_OPEN, as a JSON list. Sent in
@@ -248,7 +272,8 @@ string BuildAccount()
 // deals carry as DEAL_POSITION_ID, so a basket's closed deals can be found
 // later. PositionGetTicket() only selects a position so its fields can be
 // read; nothing here changes it. Open times are broker server time,
-// converted to UTC with the same offset as the deals.
+// converted to UTC with the same offset as the deals. point_value is
+// PointValue() for the position's symbol, read once per symbol.
 string BuildOpen()
   {
    int total = PositionsTotal();
@@ -258,12 +283,32 @@ string BuildOpen()
    int utcOffset = ServerToUtcOffset();
    int n = 0;
    string json = "[";
+   // The point value of each symbol seen so far: a grid has many
+   // positions on few symbols.
+   string pvSymbols[];
+   double pvValues[];
    for(int i = 0; i < total; i++)
      {
       ulong t = PositionGetTicket(i);
       if(t == 0)
          continue;
       long msc = PositionGetInteger(POSITION_TIME_MSC);
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      int slot = -1;
+      for(int j = 0; j < ArraySize(pvSymbols); j++)
+         if(pvSymbols[j] == symbol)
+           {
+            slot = j;
+            break;
+           }
+      if(slot < 0)
+        {
+         slot = ArraySize(pvSymbols);
+         ArrayResize(pvSymbols, slot + 1);
+         ArrayResize(pvValues, slot + 1);
+         pvSymbols[slot] = symbol;
+         pvValues[slot] = PointValue(symbol);
+        }
       string side = "sell";
       if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
          side = "buy";
@@ -271,7 +316,7 @@ string BuildOpen()
          json += ",";
       json += "{\"ticket\":\"" + StringFormat("%I64u", t) + "\""
             + ",\"position_id\":\"" + IntegerToString(PositionGetInteger(POSITION_IDENTIFIER)) + "\""
-            + ",\"symbol\":\"" + JsonEscape(PositionGetString(POSITION_SYMBOL)) + "\""
+            + ",\"symbol\":\"" + JsonEscape(symbol) + "\""
             + ",\"side\":\"" + side + "\""
             + ",\"volume\":" + Num(PositionGetDouble(POSITION_VOLUME), 4)
             + ",\"open_price\":" + Num(PositionGetDouble(POSITION_PRICE_OPEN), 6)
@@ -282,7 +327,8 @@ string BuildOpen()
             + ",\"profit\":" + Num(PositionGetDouble(POSITION_PROFIT), 2)
             + ",\"open_time\":\"" + MsToIso(msc - (long)utcOffset * 1000) + "\""
             + ",\"magic\":" + IntegerToString(PositionGetInteger(POSITION_MAGIC))
-            + ",\"comment\":\"" + JsonEscape(PositionGetString(POSITION_COMMENT)) + "\"}";
+            + ",\"comment\":\"" + JsonEscape(PositionGetString(POSITION_COMMENT)) + "\""
+            + ",\"point_value\":" + Num(pvValues[slot], 6) + "}";
       n++;
      }
    json += "]";

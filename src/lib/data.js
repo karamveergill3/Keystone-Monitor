@@ -12,10 +12,14 @@ export const listProjects = cache(async (supabase) => {
   return data ?? [];
 });
 
+// stop_out_mode ('percent' or 'money'), margin_call_level and
+// stop_out_level are the broker's, null until an EA from 2026.10.17.5
+// syncs.
 export const ACCOUNT_COLUMNS =
   "id, project_id, label, account_number, server, broker, currency, leverage, ea_version, created_at, archived_at, " +
   "last_sync_at, balance, equity, credit, margin, free_margin, margin_level, open_positions, floating_pnl, " +
-  "tracking_since, peak_equity, max_drawdown_pct, max_drawdown_at, resync_requested";
+  "tracking_since, peak_equity, max_drawdown_pct, max_drawdown_at, resync_requested, " +
+  "stop_out_mode, margin_call_level, stop_out_level";
 
 export async function listAccounts(supabase, { projectId = null, includeArchived = false } = {}) {
   let q = supabase.from("accounts").select(ACCOUNT_COLUMNS).order("label");
@@ -69,8 +73,12 @@ export async function positionsPage(supabase, accountId, { page = 1, pageSize = 
   return { rows: data ?? [], total: count ?? 0 };
 }
 
+// point_value is account currency per 1.0 move in price per lot (numeric,
+// so it may come back as a string; null from an EA older than 2026.10.17.5,
+// 0 when the terminal could not say).
 const OPEN_COLUMNS =
-  "ticket, position_id, symbol, side, volume, open_price, current_price, sl, tp, swap, profit, open_time, magic, comment, updated_at";
+  "ticket, position_id, symbol, side, volume, open_price, current_price, sl, tp, swap, profit, open_time, magic, comment, " +
+  "updated_at, point_value";
 
 // What the terminal had open at its last sync, newest first. At most a few
 // hundred rows (the sync refuses more), so one read is all of them.

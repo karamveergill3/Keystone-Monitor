@@ -13,8 +13,8 @@
 --   * Every write goes through the service role too: /api/sync after it
 --     has checked the terminal's key, and the admin screen's actions after
 --     they have checked the admin password. The functions that write
---     (sync_open_positions, track_baskets, replace_open_positions) can be
---     run by the service role only (section 8).
+--     (sync_open_positions, track_baskets) can be run by the service role
+--     only (section 8).
 --   * Sync keys are stored only as SHA-256 hashes, in their own table.
 --
 -- ROLLOUT: apply this file before deploying the code that goes with it.
@@ -89,11 +89,23 @@ create table if not exists public.accounts (
 
   -- The p_at of the open positions snapshot stored last
   -- (sync_open_positions), so an older sync that arrives late is ignored.
-  open_snapshot_at timestamptz
+  open_snapshot_at timestamptz,
+
+  -- The broker's margin call and stop-out levels (ACCOUNT_MARGIN_SO_CALL
+  -- and ACCOUNT_MARGIN_SO_SO), in stop_out_mode's unit: 'percent' is a
+  -- margin level (equity over margin, as a percentage), 'money' is equity
+  -- in the account's currency. Null until an EA from 2026.10.17.5 syncs;
+  -- an older EA's sync leaves them as they are.
+  stop_out_mode     text check (stop_out_mode in ('percent', 'money')),
+  margin_call_level numeric,
+  stop_out_level    numeric
 );
 
--- A database made before open_snapshot_at has the table without it.
+-- A database made before these columns has the table without them.
 alter table public.accounts add column if not exists open_snapshot_at timestamptz;
+alter table public.accounts add column if not exists stop_out_mode text check (stop_out_mode in ('percent', 'money'));
+alter table public.accounts add column if not exists margin_call_level numeric;
+alter table public.accounts add column if not exists stop_out_level numeric;
 
 alter table public.accounts enable row level security;
 
@@ -182,8 +194,8 @@ drop policy if exists "members read equity samples" on public.equity_samples;
 --
 -- A snapshot, not history: every sync from an EA that reports positions
 -- replaces the account's rows with what it sent (sync_open_positions in
--- section 6), so a position closed on
--- the terminal disappears here at the next sync. A sync from an older EA
+-- section 6), so a position closed on the terminal disappears here at the
+-- next sync. A sync from an older EA
 -- that does not report them leaves the rows alone; their updated_at is then
 -- older than the account's last_sync_at, which is how the page knows not to
 -- show them as current. Closed trades come from deals (account_positions
@@ -209,46 +221,22 @@ create table if not exists public.open_positions (
   -- Null from an EA older than 2026.10.17.4; baskets then use the ticket,
   -- which on MT5 is the same number for a position opened by one order.
   position_id   text,
+  -- What a 1.0 move in the symbol's price is worth on 1 lot, in the
+  -- account's currency (SYMBOL_TRADE_TICK_VALUE_LOSS over
+  -- SYMBOL_TRADE_TICK_SIZE), for how far price can move before stop-out.
+  -- Null from an EA older than 2026.10.17.5, 0 when the terminal could
+  -- not say.
+  point_value   numeric,
   primary key (account_id, ticket)
 );
 
--- A database made before position_id was sent has the table without it.
+-- A database made before these columns were sent has the table without them.
 alter table public.open_positions add column if not exists position_id text;
+alter table public.open_positions add column if not exists point_value numeric;
 
 alter table public.open_positions enable row level security;
 
 -- No policies (see projects above).
-
--- SUPERSEDED by sync_open_positions (section 6), which does this replace
--- and the basket tracking as one step. Kept only for the few minutes
--- between applying this file and the new code going live: the site
--- deployed before then still calls it. Drop it once that code is live
--- (and its grants in section 8, and its tests).
---
--- The replace, in one transaction: a failed insert undoes the delete, and
--- the account keeps its previous snapshot until the EA's retry. p_rows is
--- a JSON list of what src/lib/syncPayload.js returns for each position,
--- position_id included; a key it does not list is dropped. Service role
--- only (see section 8). If the arguments ever change, drop this signature
--- first: "create or replace" would add a second function beside it rather
--- than replace it.
-create or replace function public.replace_open_positions(p_account uuid, p_rows jsonb, p_at timestamptz)
-returns void
-language sql
-set search_path = ''
-as $$
-  delete from public.open_positions where account_id = p_account;
-  insert into public.open_positions
-    (account_id, ticket, symbol, side, volume, open_price, current_price, sl, tp, swap, profit,
-     open_time, magic, comment, updated_at, position_id)
-  select p_account, r.ticket, r.symbol, r.side, r.volume, r.open_price, r.current_price, r.sl, r.tp,
-         r.swap, r.profit, r.open_time, r.magic, r.comment, coalesce(p_at, now()), r.position_id
-    from jsonb_to_recordset(coalesce(p_rows, '[]'::jsonb)) as r (
-      ticket text, symbol text, side text, volume numeric, open_price numeric, current_price numeric,
-      sl numeric, tp numeric, swap numeric, profit numeric, open_time timestamptz, magic bigint,
-      comment text, position_id text
-    );
-$$;
 
 -- ---------------------------------------------------------------------------
 -- 6. Baskets: the life of each grid basket, for its unrealised drawdown.
@@ -312,8 +300,8 @@ create index if not exists baskets_account_closed_idx
 -- same p_at and snapshot leave the same rows. It locks the account's row,
 -- which sync_open_positions already holds; the lock only matters if this
 -- is ever run on its own. Service role only (see section 8). If the
--- arguments ever change, drop this signature first, as with
--- replace_open_positions.
+-- arguments ever change, drop this signature first: "create or replace"
+-- would add a second function beside it rather than replace it.
 create or replace function public.track_baskets(p_account uuid, p_at timestamptz, p_balance numeric, p_complete boolean)
 returns void
 language plpgsql
@@ -397,15 +385,18 @@ $$;
 -- again is a resend of a sync whose reply was lost and is replayed, which
 -- leaves the same rows.
 --
--- p_rows is as for replace_open_positions, and the rows are stamped p_at.
--- A failed replace fails the call and keeps the previous snapshot. The
+-- p_rows is a JSON list of what src/lib/syncPayload.js returns for each
+-- position, position_id and point_value included; a key it does not list
+-- is dropped, and one a row lacks is null. The rows are stamped p_at. The
+-- replace is part of the call's one transaction, so a failed insert undoes
+-- the delete: the call fails and the previous snapshot stays. The
 -- tracking runs in its own block: if it fails, only it is undone, with a
 -- warning in the database log, and the snapshot still lands. Baskets are
 -- derived data that the next good sync puts right, and a failure there
 -- must never stop the account syncing.
 --
 -- Service role only (see section 8). If the arguments ever change, drop
--- this signature first, as with replace_open_positions.
+-- this signature first, as with track_baskets.
 create or replace function public.sync_open_positions(
   p_account uuid, p_rows jsonb, p_at timestamptz, p_balance numeric, p_complete boolean)
 returns void
@@ -427,13 +418,13 @@ begin
   delete from public.open_positions where account_id = p_account;
   insert into public.open_positions
     (account_id, ticket, symbol, side, volume, open_price, current_price, sl, tp, swap, profit,
-     open_time, magic, comment, updated_at, position_id)
+     open_time, magic, comment, updated_at, position_id, point_value)
   select p_account, r.ticket, r.symbol, r.side, r.volume, r.open_price, r.current_price, r.sl, r.tp,
-         r.swap, r.profit, r.open_time, r.magic, r.comment, v_at, r.position_id
+         r.swap, r.profit, r.open_time, r.magic, r.comment, v_at, r.position_id, r.point_value
     from jsonb_to_recordset(coalesce(p_rows, '[]'::jsonb)) as r (
       ticket text, symbol text, side text, volume numeric, open_price numeric, current_price numeric,
       sl numeric, tp numeric, swap numeric, profit numeric, open_time timestamptz, magic bigint,
-      comment text, position_id text
+      comment text, position_id text, point_value numeric
     );
   update public.accounts set open_snapshot_at = v_at where id = p_account;
 
@@ -621,9 +612,6 @@ revoke all on public.projects, public.accounts, public.account_keys,
 -- Postgres lets everyone run a new function, and Supabase grants the
 -- browser roles every function in public by default. These write, so only
 -- the server may call them.
-revoke all on function public.replace_open_positions(uuid, jsonb, timestamptz)
-  from public, anon, authenticated;
-grant execute on function public.replace_open_positions(uuid, jsonb, timestamptz) to service_role;
 revoke all on function public.track_baskets(uuid, timestamptz, numeric, boolean)
   from public, anon, authenticated;
 grant execute on function public.track_baskets(uuid, timestamptz, numeric, boolean) to service_role;
@@ -632,9 +620,15 @@ revoke all on function public.sync_open_positions(uuid, jsonb, timestamptz, nume
 grant execute on function public.sync_open_positions(uuid, jsonb, timestamptz, numeric, boolean) to service_role;
 
 -- ---------------------------------------------------------------------------
--- 9. Left over from when partners signed in: who could sign in, never any
--- account data. A fresh database never has them; a re-run removes them
--- from an older one. The policies that used is_member() are dropped above.
+-- 9. Leftovers. A fresh database never has them; a re-run removes them from
+-- an older one.
 -- ---------------------------------------------------------------------------
+
+-- From when partners signed in: who could sign in, never any account data.
+-- The policies that used is_member() are dropped above.
 drop table if exists public.members;
 drop function if exists public.is_member();
+
+-- The open positions replace from before basket tracking, superseded by
+-- sync_open_positions (section 6), which the live site now calls instead.
+drop function if exists public.replace_open_positions(uuid, jsonb, timestamptz);

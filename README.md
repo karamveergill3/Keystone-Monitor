@@ -23,9 +23,9 @@ Anyone with the link       --->                                       account_po
 
 - **The EA only reads.** `public/ea/KeystoneSync.mq5` has no trading code at
   all, and `tests/ea.test.mjs` fails if any is ever added. It posts the
-  account's state (balance, equity, margin), its open positions and its
-  deals every two minutes, and straight away when a deal lands. It runs
-  beside any trading EA.
+  account's state (balance, equity, margin, the broker's margin call and
+  stop-out levels), its open positions and its deals every two minutes,
+  and straight away when a deal lands. It runs beside any trading EA.
 - **Open positions are a snapshot.** Each sync replaces the account's
   `open_positions` rows with what the terminal has open, in one transaction
   (`sync_open_positions` in `schema.sql`), so the account page shows them
@@ -35,9 +35,22 @@ Anyone with the link       --->                                       account_po
   already stored changes nothing. An EA older
   than 2026.10.17.2 does not send them; its syncs leave the table alone, and
   the page, seeing rows older than the last sync, hides them and says to
-  update the EA. The current EA is 2026.10.17.4, which also sends each
-  position's `POSITION_IDENTIFIER` (`position_id`), the number its deals
-  carry.
+  update the EA. From 2026.10.17.4 it also sends each position's
+  `POSITION_IDENTIFIER` (`position_id`), the number its deals carry.
+- **Margin call and stop-out.** The current EA, 2026.10.17.5, also sends
+  the broker's levels (`so_mode`, `margin_call`, `stop_out`: MT5's
+  `ACCOUNT_MARGIN_SO_MODE`, `ACCOUNT_MARGIN_SO_CALL`, `ACCOUNT_MARGIN_SO_SO`)
+  and, with each open position, its symbol's `point_value`: what a 1.0
+  move in price is worth on 1 lot in the account's currency
+  (`SYMBOL_TRADE_TICK_VALUE_LOSS` over `SYMBOL_TRADE_TICK_SIZE`, 0 when the
+  terminal cannot say). Together they say how far price can move against
+  each symbol's open lots before the broker calls margin or closes
+  positions, the main risk for a grid. They are stored as
+  `accounts.stop_out_mode` (`percent`, a margin level, or `money`, an
+  equity figure), `margin_call_level` and `stop_out_level`, and
+  `open_positions.point_value`. An older EA sends none of them; its syncs
+  leave the stored levels as they are, and its positions have no point
+  value.
 - **Grid baskets are tracked for their drawdown.** A basket is every open
   position on one account with the same symbol and side, whatever their
   magic numbers (a grid EA may give each level its own; merging two EAs'
@@ -114,10 +127,13 @@ apply it in the SQL editor *before* the code that goes with it deploys
 pages and `/api/sync` read and call what the schema adds, so code that
 lands first fails until the schema catches up; the schema is written so the
 code still running keeps working against it in the meantime. For the
-basket tracking change, that means applying the schema, then deploying:
-the old site keeps calling `replace_open_positions` and `track_baskets`
-until the new one, which calls `sync_open_positions` and reads
-`equity_samples.credit`, is live.
+margin and stop-out change, that means applying the schema, then
+deploying: it adds the broker's levels to `accounts` and `point_value` to
+`open_positions`, and `sync_open_positions` (same arguments) starts
+storing each position's point value; the site still running never names
+the new columns. The same run drops `replace_open_positions`, which
+nothing has called since the basket tracking change went live: the site
+calls `sync_open_positions` only.
 
 Supabase Auth is not used, so nothing under Authentication needs setting.
 

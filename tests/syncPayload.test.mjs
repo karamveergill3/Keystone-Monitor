@@ -74,6 +74,7 @@ test("open positions are read into rows", () => {
     open_time: "2026-10-03T07:30:00.123Z",
     magic: 100,
     comment: "grid 1",
+    point_value: 100,
   });
   assert.equal(p.open[1].side, "sell");
   assert.equal(p.open[1].comment, null);
@@ -140,4 +141,63 @@ test("an open position's position_id is read, and is null from an EA that does n
   delete older.position_id;
   assert.equal(parseSyncPayload(payload({ open: [older] }), NOW).open[0].position_id, null);
   assert.equal(parseSyncPayload(payload({ open: [{ ...pos, position_id: null }] }), NOW).open[0].position_id, null);
+});
+
+test("the broker's margin call and stop-out levels are read with their unit", () => {
+  const { account } = parseSyncPayload(payload(), NOW);
+  assert.deepEqual(
+    [account.stop_out_mode, account.margin_call_level, account.stop_out_level],
+    ["percent", 100, 50]
+  );
+  const money = parseSyncPayload(payload({ account: { ...payload().account, so_mode: 1, margin_call: "2500", stop_out: 1000 } }), NOW);
+  assert.deepEqual(
+    [money.account.stop_out_mode, money.account.margin_call_level, money.account.stop_out_level],
+    ["money", 2500, 1000]
+  );
+  // The mode as a string of its digit, as JSON from some other sender might.
+  assert.equal(parseSyncPayload(payload({ account: { ...payload().account, so_mode: "1" } }), NOW).account.stop_out_mode, "money");
+});
+
+test("levels in an unknown unit, or from an EA that does not send them, are null", () => {
+  for (const so_mode of [2, -1, 0.5, "percent", "", null, true, [0]]) {
+    const { account } = parseSyncPayload(payload({ account: { ...payload().account, so_mode } }), NOW);
+    assert.equal(account.stop_out_mode, null, JSON.stringify(so_mode));
+  }
+  const older = { ...payload().account };
+  delete older.so_mode;
+  delete older.margin_call;
+  delete older.stop_out;
+  const { account } = parseSyncPayload(payload({ account: older }), NOW);
+  assert.deepEqual([account.stop_out_mode, account.margin_call_level, account.stop_out_level], [null, null, null]);
+});
+
+test("a level that is not a number is refused whole", () => {
+  const a = payload().account;
+  for (const bad of [{ margin_call: "abc" }, { stop_out: "NaN" }, { stop_out: "Infinity" }, { margin_call: {} }]) {
+    assert.throws(() => parseSyncPayload(payload({ account: { ...a, ...bad } }), NOW), SyncPayloadError, JSON.stringify(bad));
+  }
+});
+
+test("an open position's point value is read, 0 kept, and null from an EA that does not send it", () => {
+  const pos = payload().open[0];
+  const { open } = parseSyncPayload(
+    payload({ open: [{ ...pos, point_value: 0 }, { ...pos, ticket: "1009", point_value: "0.6713" }] }),
+    NOW
+  );
+  assert.deepEqual(open.map((o) => o.point_value), [0, 0.6713]);
+  const older = { ...pos };
+  delete older.point_value;
+  assert.equal(parseSyncPayload(payload({ open: [older] }), NOW).open[0].point_value, null);
+  assert.equal(parseSyncPayload(payload({ open: [{ ...pos, point_value: null }] }), NOW).open[0].point_value, null);
+});
+
+test("a negative or non-numeric point value is refused whole", () => {
+  const pos = payload().open[0];
+  for (const point_value of [-1, "-0.5", "abc", "NaN", "Infinity", {}]) {
+    assert.throws(
+      () => parseSyncPayload(payload({ open: [pos, { ...pos, ticket: "1006", point_value }] }), NOW),
+      SyncPayloadError,
+      JSON.stringify(point_value)
+    );
+  }
 });

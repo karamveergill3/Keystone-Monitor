@@ -311,32 +311,3 @@ export function flagReason({ banked, weekRealised }, currency) {
   if (num(banked) > 0) return `Deeper than this week's ${money(banked, currency, { sign: true })} banked`;
   return `In loss, and the week has banked nothing (${money(num(weekRealised) ?? 0, currency, { sign: true })})`;
 }
-
-// Every flagged basket across several accounts, deepest first, for the
-// alert panel. rows are account rows (accountRow in src/lib/accountView.js:
-// id, label, currency, status, last_sync_at) each carrying its
-// accountBaskets result as baskets. A reading is as of the account's last
-// sync, so each item says when that was and whether the account is offline.
-// Accounts in different currencies are ordered by amount without an
-// exchange rate: the order is a reading aid, and every figure shows its own
-// currency.
-export function flaggedItems(rows) {
-  const items = [];
-  for (const r of Array.isArray(rows) ? rows : []) {
-    for (const basket of r?.baskets?.flagged ?? []) {
-      items.push({
-        accountId: r.id,
-        accountLabel: r.label,
-        currency: r.currency,
-        weekRealised: r.baskets.weekRealised,
-        banked: r.baskets.banked,
-        lastSyncAt: r.last_sync_at ?? r.baskets.lastSyncAt ?? null,
-        offline: r.status === "offline",
-        basket,
-      });
-    }
-  }
-  return items.sort(
-    (a, b) => a.basket.floating - b.basket.floating || String(a.accountLabel).localeCompare(String(b.accountLabel)),
-  );
-}

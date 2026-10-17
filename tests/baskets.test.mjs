@@ -8,7 +8,6 @@ import {
   accountBaskets,
   shortDuration,
   closedBasket,
-  flaggedItems,
   flagReason,
   priceDecimals,
 } from "@/lib/baskets";
@@ -225,7 +224,7 @@ test("a flag says what the week banked, never a loss as the threshold", () => {
   const flat = accountBaskets({ rows: grid(), account: account(), weekRealised: 0 });
   assert.equal(flagReason(flat, "EUR"), "In loss, and the week has banked nothing (€0.00)");
 
-  // Also from a flaggedItems item, which carries the same two figures.
+  // From the two figures alone, as anything carrying them can pass.
   assert.equal(flagReason({ banked: 1234.5, weekRealised: 1234.5 }, "GBP"), "Deeper than this week's +£1,234.50 banked");
   assert.equal(flagReason({ banked: undefined, weekRealised: undefined }, "USD"), "In loss, and the week has banked nothing ($0.00)");
 });
@@ -239,7 +238,6 @@ test("an archived account lists its baskets but flags none", () => {
   assert.equal(v.baskets[0].drawdown, 85);
   assert.deepEqual(v.flagged, []);
   assert.ok(v.baskets.every((b) => b.flagged === false));
-  assert.deepEqual(flaggedItems([{ id: "a", label: "Old", currency: "USD", status: "offline", last_sync_at: SYNC, baskets: v }]), []);
 });
 
 test("figures are as of the last sync, however long ago it was", () => {
@@ -371,50 +369,3 @@ test("a closed basket closes at its last closing deal, or the sync that saw it g
   assert.equal(closedBasket({ ...row, worst_floating: 12 }).worstDrawdown, 0);
 });
 
-test("flagged baskets across accounts, deepest first", () => {
-  const a = {
-    id: "a",
-    label: "Alpha",
-    currency: "USD",
-    status: "online",
-    last_sync_at: SYNC,
-    baskets: accountBaskets({ rows: grid(), account: account(), weekRealised: -1 }),
-  };
-  const b = {
-    id: "b",
-    label: "Beta",
-    currency: "EUR",
-    status: "offline",
-    last_sync_at: EARLIER,
-    baskets: accountBaskets({ rows: [position({ profit: -300, updated_at: EARLIER })], account: account({ last_sync_at: EARLIER }), weekRealised: 100 }),
-  };
-  const none = { id: "c", label: "Gamma", currency: "USD", baskets: accountBaskets({ rows: [position({ profit: 5 })], account: account(), weekRealised: 0 }) };
-  const missing = { id: "d", label: "Delta", currency: "USD" };
-
-  const items = flaggedItems([a, b, none, missing]);
-  assert.deepEqual(
-    items.map((i) => [i.accountLabel, i.basket.key, i.basket.floating]),
-    [["Beta", "XAUUSD|buy", -300], ["Alpha", "EURUSD|sell", -85], ["Alpha", "XAUUSD|buy", -2.5]],
-  );
-  assert.equal(items[0].accountId, "b");
-  assert.equal(items[0].currency, "EUR");
-  assert.equal(items[0].weekRealised, 100);
-  assert.equal(items[0].banked, 100);
-  assert.equal(items[1].weekRealised, -1);
-  assert.equal(items[1].banked, 0);
-
-  // Each item says when its reading is from, and an offline account's
-  // reading is marked as such.
-  assert.deepEqual(items.map((i) => [i.lastSyncAt, i.offline]), [[EARLIER, true], [SYNC, false], [SYNC, false]]);
-  assert.equal(flagReason(items[0], items[0].currency), "Deeper than this week's +€100.00 banked");
-  assert.equal(flagReason(items[1], items[1].currency), "In loss, and the week has banked nothing (-$1.00)");
-
-  // Waiting, or no status at all, is not offline; last_sync_at falls back to the baskets'.
-  const bare = flaggedItems([{ id: "e", label: "Echo", currency: "USD", baskets: a.baskets }]);
-  assert.equal(bare[0].offline, false);
-  assert.equal(bare[0].lastSyncAt, SYNC);
-  assert.equal(flaggedItems([{ ...a, status: "waiting" }])[0].offline, false);
-
-  assert.deepEqual(flaggedItems([]), []);
-  assert.deepEqual(flaggedItems(null), []);
-});

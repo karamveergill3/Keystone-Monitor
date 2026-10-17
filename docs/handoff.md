@@ -4,6 +4,50 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
+## 2026-10-17 (Claude Code, Mac): Needs-attention highlights and distance to stop-out; all live
+
+### What changed
+
+- No alerts of any kind, by the owner's choice: the site highlights what
+  needs looking at. `src/lib/attention.js` gives each account its reasons
+  (red: a basket past the week's banked profit, under 2% from stop-out, at
+  margin call, floating drawdown from 10%; amber: under 5% from stop-out,
+  floating drawdown from 5%, stop-out not checked, a position list cut
+  short at 500, offline, EA too old, waiting for a first sync). They show
+  in a Needs attention panel on the overview and project pages (one calm
+  line when nothing is wrong), as tinted rows with reason tags in the
+  accounts table, and as a banner on the account page. Thresholds are
+  `LIMITS` in that file and apply to figures as shown (two decimals).
+- Distance to stop-out (`src/lib/risk.js`): per symbol, net lots times the
+  point value against the equity above the broker's margin call and
+  stop-out. The account page has a Margin and stop-out section, and the
+  Open baskets table a To stop-out column.
+- EA 2026.10.17.5 sends the broker's levels (ACCOUNT_MARGIN_SO_MODE,
+  _SO_CALL, _SO_SO) and each position's point value (tick value on loss /
+  tick size). Stored as accounts.stop_out_mode, margin_call_level,
+  stop_out_level and open_positions.point_value.
+- `replace_open_positions()` is dropped; `sync_open_positions()` is the
+  only write path for open positions.
+
+### Why
+
+Grid bots fail by trending into stop-out; the owner wants every account's
+risk visible on the site without notifications.
+
+### Watch out
+
+- Until a terminal runs EA 2026.10.17.5 its account shows "Stop-out not
+  checked" whenever it has margin in use. That is deliberate: the panel
+  must never say "nothing near stop-out" for an account it could not
+  check.
+- The demo account is never synced, so it shows Offline after 10 minutes.
+
+### Still needs a human
+
+- Compile EA 2026.10.17.5 in MetaEditor (not compiled here) and attach it
+  to every terminal.
+
+---
 ## 2026-10-17 (Claude Code, Mac): Grid baskets tracked and flagged, new charts, paged lists; all live
 
 ### What changed

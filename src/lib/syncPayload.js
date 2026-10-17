@@ -48,6 +48,26 @@ function str(value, max) {
   return s ? s.slice(0, max) : null;
 }
 
+// ACCOUNT_MARGIN_SO_MODE: 0 says the margin call and stop-out levels are
+// margin level percentages, 1 that they are equity in money. Anything else
+// (an EA that does not send it, or a mode MT5 does not have) is null, so
+// the levels are never read in the wrong unit.
+function stopOutMode(value) {
+  const n = typeof value === "number" ? value : typeof value === "string" && value.trim() ? Number(value) : NaN;
+  if (n === 0) return "percent";
+  if (n === 1) return "money";
+  return null;
+}
+
+// Account currency per 1.0 move in price per lot. The EA sends 0 when the
+// terminal cannot say, which is kept as it is; a negative one is no point
+// value at all and is refused like any other bad figure.
+function pointValue(value, field) {
+  const n = num(value, field);
+  if (n !== null && n < 0) fail(`${field} is negative`);
+  return n;
+}
+
 function digits(value, field) {
   const s = String(value ?? "").trim();
   if (!/^\d{1,20}$/.test(s)) fail(`${field} must be digits`);
@@ -118,6 +138,9 @@ function parseOpenPosition(p, i, now) {
     open_time: time(p.open_time, `${at}.open_time`, now),
     magic: int(p.magic, `${at}.magic`),
     comment: str(p.comment, 80),
+    // SYMBOL_TRADE_TICK_VALUE_LOSS / SYMBOL_TRADE_TICK_SIZE for the
+    // position's symbol. An EA older than 2026.10.17.5 does not send it.
+    point_value: pointValue(p.point_value, `${at}.point_value`),
   };
 }
 
@@ -159,6 +182,12 @@ export function parseSyncPayload(body, now = Date.now()) {
     margin_level: num(a.margin_level, "account.margin_level"),
     open_positions: int(a.positions, "account.positions"),
     floating_pnl: num(a.floating, "account.floating"),
+    // The broker's margin call and stop-out levels, in stop_out_mode's
+    // unit. All null from an EA older than 2026.10.17.5, and syncIngest.js
+    // then leaves what an earlier sync stored.
+    stop_out_mode: stopOutMode(a.so_mode),
+    margin_call_level: num(a.margin_call, "account.margin_call"),
+    stop_out_level: num(a.stop_out, "account.stop_out"),
   };
   if (!account.server) fail("account.server is missing");
 

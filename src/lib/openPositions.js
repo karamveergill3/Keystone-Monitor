@@ -10,6 +10,10 @@
 // The first EA build that lists its open positions.
 export const OPEN_POSITIONS_EA = "2026.10.17.2";
 
+// The first that also sends the broker's margin call and stop-out levels
+// and each position's point value, which the distance to stop-out needs.
+export const BROKER_LEVELS_EA = "2026.10.17.5";
+
 // "2026.10.17.2" as [2026, 10, 17, 2]; null for anything else.
 function versionParts(version) {
   const s = String(version ?? "").trim();

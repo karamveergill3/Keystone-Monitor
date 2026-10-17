@@ -194,58 +194,78 @@ test("open positions are a per-account snapshot that goes with its account", asy
 });
 
 const SNAPSHOT = "50000000-0000-0000-0000-000000000005";
-const REPLACE = "select public.replace_open_positions($1, $2::jsonb, $3)";
 
 async function snapshotRows() {
   const { rows } = await db.query(
     `select ticket, symbol, side, volume::float8, open_price::float8, current_price::float8, sl::float8, tp::float8,
             swap::float8, profit::float8, to_char(open_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as open_time,
             magic::int, comment, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as updated_at,
-            position_id
+            position_id, point_value::float8
        from public.open_positions where account_id = $1 order by ticket`,
     [SNAPSHOT]
   );
   return rows;
 }
 
-test("replace_open_positions swaps an account's snapshot for exactly what the sync parsed", async () => {
+test("sync_open_positions swaps an account's snapshot for exactly what the sync parsed", async () => {
   await db.exec(`
     insert into public.accounts (id, project_id, label)
       select '${SNAPSHOT}', id, 'Replace' from public.projects where slug = 'v100';
   `);
   const { open } = parseSyncPayload(payload(), Date.parse("2026-10-17T12:00:00Z"));
   const at = "2026-10-17T12:00:00.000Z";
-  await asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify(open), at] });
-  // Every field the parser returns lands in its column, nothing dropped.
+  const replace = (rows, when) =>
+    asServer({ sql: "select public.sync_open_positions($1, $2::jsonb, $3, $4, $5)", params: [SNAPSHOT, JSON.stringify(rows), when, 10_000, true] });
+  await replace(open, at);
+  // Every field the parser returns lands in its column, point_value
+  // included, nothing dropped.
   assert.deepEqual(await snapshotRows(), open.map((p) => ({ ...p, updated_at: at })));
+  assert.deepEqual((await snapshotRows()).map((r) => r.point_value), [100, 100_000]);
 
-  // The next sync's list replaces it: 1004 closed, 1005 still open.
+  // The next sync's list replaces it: 1004 closed, 1005 still open. A row
+  // without point_value (an older EA) stores none.
   const later = "2026-10-17T12:02:00.000Z";
-  await asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify([open[1]]), later] });
-  assert.deepEqual((await snapshotRows()).map((r) => [r.ticket, r.updated_at]), [["1005", later]]);
+  const older = { ...open[1] };
+  delete older.point_value;
+  await replace([older], later);
+  assert.deepEqual((await snapshotRows()).map((r) => [r.ticket, r.updated_at, r.point_value]), [["1005", later, null]]);
 
   // Everything closed.
-  await asServer({ sql: REPLACE, params: [SNAPSHOT, "[]", later] });
+  await replace([], "2026-10-17T12:04:00.000Z");
   assert.deepEqual(await snapshotRows(), []);
   // Other accounts' rows are never touched.
   const other = await db.query("select count(*)::int as n from public.open_positions where account_id <> $1", [SNAPSHOT]);
   assert.ok(other.rows[0].n > 0);
 });
 
-test("a replace that fails part way keeps the previous snapshot", async () => {
-  const { open } = parseSyncPayload(payload(), Date.parse("2026-10-17T12:00:00Z"));
-  const at = "2026-10-17T12:04:00.000Z";
-  await asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify(open), at] });
-  const before = await snapshotRows();
-  assert.equal(before.length, 2);
-  // The delete runs, then the insert hits a bad row: the delete is undone
-  // with it, so the account is never left with no positions.
-  const bad = [{ ...open[0], ticket: "1010" }, { ...open[1], ticket: "1011", side: "long" }];
+test("the open positions replace from before basket tracking is gone", async () => {
+  const { rows } = await db.query(
+    "select to_regprocedure('public.replace_open_positions(uuid, jsonb, timestamptz)') as fn"
+  );
+  assert.deepEqual(rows, [{ fn: null }]);
+});
+
+test("accounts hold the broker's levels, in percent or money only", async () => {
+  const ACC = "10000000-0000-0000-0000-000000000001";
+  await asServer({
+    sql: "update public.accounts set stop_out_mode = 'percent', margin_call_level = 100, stop_out_level = 50 where id = $1",
+    params: [ACC],
+  });
+  const { rows } = await db.query(
+    "select stop_out_mode, margin_call_level::float8, stop_out_level::float8 from public.accounts where id = $1",
+    [ACC]
+  );
+  assert.deepEqual(rows, [{ stop_out_mode: "percent", margin_call_level: 100, stop_out_level: 50 }]);
+  await asServer({ sql: "update public.accounts set stop_out_mode = 'money' where id = $1", params: [ACC] });
   await assert.rejects(
-    asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify(bad), "2026-10-17T12:06:00.000Z"] }),
+    asServer({ sql: "update public.accounts set stop_out_mode = 'points' where id = $1", params: [ACC] }),
     /check constraint/
   );
-  assert.deepEqual(await snapshotRows(), before);
+  // Null until an EA that sends them syncs.
+  const fresh = await db.query(
+    "select stop_out_mode, margin_call_level, stop_out_level from public.accounts where id = '20000000-0000-0000-0000-000000000002'"
+  );
+  assert.deepEqual(fresh.rows, [{ stop_out_mode: null, margin_call_level: null, stop_out_level: null }]);
 });
 
 // ---------------------------------------------------------------------------
@@ -645,12 +665,15 @@ test("a grid level opened and closed between two syncs counts in its basket", as
   ]);
 });
 
-test("re-running the schema keeps every basket and open position as it was", async () => {
+test("re-running the schema keeps every basket, open position and account as it was", async () => {
   const baskets = await basketRows(GRID);
   const open = (await db.query("select * from public.open_positions order by account_id, ticket")).rows;
+  const accounts = (await db.query("select * from public.accounts order by id")).rows;
+  assert.ok(accounts.some((a) => a.stop_out_mode !== null));
   await db.exec(SCHEMA);
   assert.deepEqual(await basketRows(GRID), baskets);
   assert.deepEqual((await db.query("select * from public.open_positions order by account_id, ticket")).rows, open);
+  assert.deepEqual((await db.query("select * from public.accounts order by id")).rows, accounts);
 });
 
 test("an older database gains the new columns and keeps its rows", async () => {
@@ -658,16 +681,24 @@ test("an older database gains the new columns and keeps its rows", async () => {
   try {
     await old.exec(SUPABASE_STUB);
     await old.exec(SCHEMA);
-    // As the live database was: open_positions without position_id, no
-    // baskets, no snapshot time on accounts and no credit on samples.
+    // As the live database was: open_positions without position_id or
+    // point_value, no baskets, no snapshot time or broker levels on
+    // accounts, no credit on samples, and the old replace still there.
     await old.exec(`
       drop view public.basket_results;
       drop function public.sync_open_positions(uuid, jsonb, timestamptz, numeric, boolean);
       drop function public.track_baskets(uuid, timestamptz, numeric, boolean);
       drop table public.baskets;
       alter table public.open_positions drop column position_id;
+      alter table public.open_positions drop column point_value;
       alter table public.accounts drop column open_snapshot_at;
+      alter table public.accounts drop column stop_out_mode;
+      alter table public.accounts drop column margin_call_level;
+      alter table public.accounts drop column stop_out_level;
       alter table public.equity_samples drop column credit;
+      create function public.replace_open_positions(p_account uuid, p_rows jsonb, p_at timestamptz)
+        returns void language sql as $$ delete from public.open_positions where account_id = p_account $$;
+      grant execute on function public.replace_open_positions(uuid, jsonb, timestamptz) to service_role;
       insert into public.accounts (id, project_id, label)
         select '${GRID}', id, 'Old' from public.projects where slug = 'v100';
       insert into public.open_positions (account_id, ticket, symbol, side, volume, profit)
@@ -675,18 +706,31 @@ test("an older database gains the new columns and keeps its rows", async () => {
       insert into public.equity_samples (account_id, at, balance, equity)
         values ('${GRID}', '2026-10-12 09:00Z', 1000, 1250);
     `);
+    // Twice: the upgrade itself must be re-runnable too.
     await old.exec(SCHEMA);
-    const { rows } = await old.query("select ticket, position_id from public.open_positions");
-    assert.deepEqual(rows, [{ ticket: "1", position_id: null }]);
+    await old.exec(SCHEMA);
+    const { rows } = await old.query("select ticket, position_id, point_value from public.open_positions");
+    assert.deepEqual(rows, [{ ticket: "1", position_id: null, point_value: null }]);
     const samples = await old.query("select equity::float8, credit::float8 from public.equity_samples");
     assert.deepEqual(samples.rows, [{ equity: 1250, credit: 0 }]);
-    const acc = await old.query("select open_snapshot_at from public.accounts where id = $1", [GRID]);
-    assert.deepEqual(acc.rows, [{ open_snapshot_at: null }]);
+    const acc = await old.query(
+      "select open_snapshot_at, stop_out_mode, margin_call_level, stop_out_level from public.accounts where id = $1",
+      [GRID]
+    );
+    assert.deepEqual(acc.rows, [{ open_snapshot_at: null, stop_out_mode: null, margin_call_level: null, stop_out_level: null }]);
+    // The mode's check came with the column.
+    await assert.rejects(old.exec(`update public.accounts set stop_out_mode = 'points' where id = '${GRID}'`), /check constraint/);
+    const gone = await old.query("select to_regprocedure('public.replace_open_positions(uuid, jsonb, timestamptz)') as fn");
+    assert.deepEqual(gone.rows, [{ fn: null }]);
     // The old row's ticket stands in for its missing position_id.
     const at = (await old.query("select updated_at from public.open_positions")).rows[0].updated_at;
     await old.query(TRACK, [GRID, at, 1000, true]);
     const b = await old.query("select position_ids, floating::float8 from public.baskets");
     assert.deepEqual(b.rows, [{ position_ids: ["1"], floating: -5 }]);
+    // sync_open_positions, unchanged in its signature, now stores point_value.
+    await old.query(SYNC, [GRID, JSON.stringify([{ ...pos("2", "XAUUSD", "buy", 0.1, -5), point_value: 100 }]), "2099-01-01T00:00:00Z", 1000, false]);
+    const pv = await old.query("select ticket, point_value::float8 from public.open_positions order by ticket");
+    assert.deepEqual(pv.rows, [{ ticket: "2", point_value: 100 }]);
   } finally {
     await old.close();
   }
@@ -726,10 +770,6 @@ test("a browser writes nothing", async () => {
     );
     await assert.rejects(as(userId, "delete from public.open_positions"), /permission denied/);
     await assert.rejects(
-      as(userId, "select public.replace_open_positions('10000000-0000-0000-0000-000000000001', '[]'::jsonb, now())"),
-      /permission denied/
-    );
-    await assert.rejects(
       as(userId, "select public.track_baskets('10000000-0000-0000-0000-000000000001', now(), 0, true)"),
       /permission denied/
     );
@@ -745,7 +785,6 @@ test("a browser writes nothing", async () => {
   assert.equal(left.rows[0].n, 1);
   // Refused at the door, not only by the table behind it.
   for (const fn of [
-    "public.replace_open_positions(uuid, jsonb, timestamptz)",
     "public.track_baskets(uuid, timestamptz, numeric, boolean)",
     "public.sync_open_positions(uuid, jsonb, timestamptz, numeric, boolean)",
   ]) {

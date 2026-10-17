@@ -94,7 +94,7 @@ function fakeDb() {
 // in a row is dropped, as jsonb_to_recordset drops it.
 const OPEN_COLUMNS = [
   "ticket", "symbol", "side", "volume", "open_price", "current_price", "sl", "tp",
-  "swap", "profit", "open_time", "magic", "comment", "position_id",
+  "swap", "profit", "open_time", "magic", "comment", "position_id", "point_value",
 ];
 
 function pick(obj, keys) {
@@ -304,6 +304,18 @@ test("the open positions and their baskets go to the database in one call", asyn
   // The same instant as the account's last_sync_at.
   assert.equal(args.p_at, db.accounts.get("acc-1").last_sync_at);
   assert.equal(db.open.get("acc-1:1004").position_id, "1004");
+  // Each position's point value goes with it, for the stop-out distances.
+  assert.deepEqual(args.p_rows.map((r) => r.point_value), [100, 100_000]);
+  assert.equal(db.open.get("acc-1:1005").point_value, 100_000);
+});
+
+test("a position from an EA that sends no point value is stored without one", async () => {
+  const { db, key } = setup();
+  const p = payload({ ea: "2026.10.17.4" });
+  for (const o of p.open) delete o.point_value;
+  await sync(db, key, p);
+  assert.deepEqual(db.calls[0][1].p_rows.map((r) => r.point_value), [null, null]);
+  assert.equal(db.open.get("acc-1:1004").point_value, null);
 });
 
 test("baskets are only closed on a list that is the terminal's whole list", async () => {
@@ -395,4 +407,49 @@ test("the sync interval is bounded", () => {
   assert.equal(syncIntervalSec({ SYNC_INTERVAL_SEC: "5" }), 30);
   assert.equal(syncIntervalSec({ SYNC_INTERVAL_SEC: "9999" }), 600);
   assert.equal(syncIntervalSec({ SYNC_INTERVAL_SEC: "90" }), 90);
+});
+
+test("the broker's margin call and stop-out levels are stored on the account", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  const acc = db.accounts.get("acc-1");
+  assert.deepEqual(
+    [acc.stop_out_mode, acc.margin_call_level, acc.stop_out_level],
+    ["percent", 100, 50]
+  );
+
+  // The broker changes them (or the account moves to money levels).
+  const p = payload();
+  Object.assign(p.account, { so_mode: 1, margin_call: 2_000, stop_out: 1_000 });
+  await sync(db, key, p, T0 + 60_000);
+  const after = db.accounts.get("acc-1");
+  assert.deepEqual(
+    [after.stop_out_mode, after.margin_call_level, after.stop_out_level],
+    ["money", 2_000, 1_000]
+  );
+});
+
+test("an EA that does not send the levels leaves the stored ones alone", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  const old = payload({ ea: "2026.10.17.4" });
+  delete old.account.so_mode;
+  delete old.account.margin_call;
+  delete old.account.stop_out;
+  const res = await sync(db, key, old, T0 + 60_000);
+  assert.equal(res.status, 200);
+  const acc = db.accounts.get("acc-1");
+  assert.equal(acc.ea_version, "2026.10.17.4");
+  assert.equal(acc.last_sync_at, new Date(T0 + 60_000).toISOString());
+  assert.deepEqual(
+    [acc.stop_out_mode, acc.margin_call_level, acc.stop_out_level],
+    ["percent", 100, 50]
+  );
+
+  // The update does not name them at all, so whatever the database holds
+  // stays, even on a row the fake has never seen them on.
+  const fresh = setup();
+  await sync(fresh.db, fresh.key, old);
+  const row = fresh.db.accounts.get("acc-1");
+  for (const k of ["stop_out_mode", "margin_call_level", "stop_out_level"]) assert.equal(k in row, false, k);
 });

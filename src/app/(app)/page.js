@@ -1,11 +1,13 @@
 import Link from "next/link";
 import AccountsTable from "@/components/AccountsTable";
 import CurrencyTotals from "@/components/CurrencyTotals";
-import BasketAlerts, { flaggedItems } from "@/components/BasketAlerts";
+import AttentionPanel from "@/components/AttentionPanel";
 import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor, openPositionsFor, openBasketsFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { accountBaskets } from "@/lib/baskets";
+import { accountRisk } from "@/lib/risk";
+import { accountAttention, attentionItems } from "@/lib/attention";
 import { todayKey } from "@/lib/days";
 import { dayLabel } from "@/lib/format";
 import { projectTint } from "@/lib/ui";
@@ -25,7 +27,8 @@ export default async function OverviewPage() {
   const rows = accounts.map((a) => {
     const row = accountRow(a, daily.get(a.id), today);
     const baskets = accountBaskets({ rows: openMap.get(a.id), account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(a.id) });
-    return { ...row, baskets };
+    const risk = accountRisk({ rows: openMap.get(a.id), account: row });
+    return { ...row, baskets, attention: accountAttention({ row, baskets, risk }) };
   });
 
   return (
@@ -36,7 +39,7 @@ export default async function OverviewPage() {
           Every external account, both projects. Days are London days; today is {dayLabel(today)}.
         </p>
       </div>
-      <BasketAlerts items={flaggedItems(rows)} />
+      <AttentionPanel items={attentionItems(rows)} checked={rows.length} />
       {projects.map((p) => {
         const projectRows = rows.filter((r) => r.project_id === p.id);
         return (

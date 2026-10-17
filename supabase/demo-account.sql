@@ -245,25 +245,27 @@ begin
                  where d.account_id = acc and d.position_id = any (bk.position_ids))
   where bk.account_id = acc;
 
-  -- Three grid baskets open now, each position's id its ticket.
+  -- Three grid baskets open now, each position's id its ticket, and each
+  -- with its symbol's point value (account currency per 1.00 of price per
+  -- lot, as the EA sends it): 100, 100,000 and 1.
   --   XAUUSD buy: six levels $6 apart from 2668, lots growing, price now
   --     2633.30. $100 per $1 per lot: -1,841.00 profit, -7.90 swap.
   --   EURUSD sell: three levels 15 pips apart, price now 1.08608. $10 per
   --     pip per lot: -95.60.
   --   NAS100 buy: two levels 30 points apart, price now 20135. $1 per point
   --     per lot: +60.00.
-  insert into public.open_positions (account_id, ticket, position_id, symbol, side, volume, open_price, current_price, sl, tp, swap, profit, open_time, magic, comment, updated_at) values
-    (acc, '7999001', '7999001', 'XAUUSD', 'buy', 0.10, 2668.00, 2633.30, 0, 0, -2.30, -347.00, ago[70], 2026, 'grid 1', now()),
-    (acc, '7999002', '7999002', 'XAUUSD', 'buy', 0.10, 2662.00, 2633.30, 0, 0, -1.90, -287.00, ago[58], 2026, 'grid 2', now()),
-    (acc, '7999003', '7999003', 'XAUUSD', 'buy', 0.15, 2656.00, 2633.30, 0, 0, -1.60, -340.50, ago[46], 2026, 'grid 3', now()),
-    (acc, '7999004', '7999004', 'XAUUSD', 'buy', 0.20, 2650.00, 2633.30, 0, 0, -1.20, -334.00, ago[30], 2026, 'grid 4', now()),
-    (acc, '7999005', '7999005', 'XAUUSD', 'buy', 0.30, 2644.00, 2633.30, 0, 0, -0.90, -321.00, ago[16], 2026, 'grid 5', now()),
-    (acc, '7999006', '7999006', 'XAUUSD', 'buy', 0.45, 2638.00, 2633.30, 0, 0, 0, -211.50, ago[5], 2026, 'grid 6', now()),
-    (acc, '7999007', '7999007', 'EURUSD', 'sell', 0.20, 1.08300, 1.08608, 0, 0, 0, -61.60, ago[20], 2026, 'grid 1', now()),
-    (acc, '7999008', '7999008', 'EURUSD', 'sell', 0.20, 1.08450, 1.08608, 0, 0, 0, -31.60, ago[12], 2026, 'grid 2', now()),
-    (acc, '7999009', '7999009', 'EURUSD', 'sell', 0.30, 1.08600, 1.08608, 0, 0, 0, -2.40, ago[6], 2026, 'grid 3', now()),
-    (acc, '7999010', '7999010', 'NAS100', 'buy', 1.00, 20120.00, 20135.00, 0, 0, 0, 15.00, ago[9], 2026, 'grid 1', now()),
-    (acc, '7999011', '7999011', 'NAS100', 'buy', 1.00, 20090.00, 20135.00, 0, 0, 0, 45.00, ago[4], 2026, 'grid 2', now());
+  insert into public.open_positions (account_id, ticket, position_id, symbol, side, volume, open_price, current_price, sl, tp, swap, profit, open_time, magic, comment, updated_at, point_value) values
+    (acc, '7999001', '7999001', 'XAUUSD', 'buy', 0.10, 2668.00, 2633.30, 0, 0, -2.30, -347.00, ago[70], 2026, 'grid 1', now(), 100),
+    (acc, '7999002', '7999002', 'XAUUSD', 'buy', 0.10, 2662.00, 2633.30, 0, 0, -1.90, -287.00, ago[58], 2026, 'grid 2', now(), 100),
+    (acc, '7999003', '7999003', 'XAUUSD', 'buy', 0.15, 2656.00, 2633.30, 0, 0, -1.60, -340.50, ago[46], 2026, 'grid 3', now(), 100),
+    (acc, '7999004', '7999004', 'XAUUSD', 'buy', 0.20, 2650.00, 2633.30, 0, 0, -1.20, -334.00, ago[30], 2026, 'grid 4', now(), 100),
+    (acc, '7999005', '7999005', 'XAUUSD', 'buy', 0.30, 2644.00, 2633.30, 0, 0, -0.90, -321.00, ago[16], 2026, 'grid 5', now(), 100),
+    (acc, '7999006', '7999006', 'XAUUSD', 'buy', 0.45, 2638.00, 2633.30, 0, 0, 0, -211.50, ago[5], 2026, 'grid 6', now(), 100),
+    (acc, '7999007', '7999007', 'EURUSD', 'sell', 0.20, 1.08300, 1.08608, 0, 0, 0, -61.60, ago[20], 2026, 'grid 1', now(), 100000),
+    (acc, '7999008', '7999008', 'EURUSD', 'sell', 0.20, 1.08450, 1.08608, 0, 0, 0, -31.60, ago[12], 2026, 'grid 2', now(), 100000),
+    (acc, '7999009', '7999009', 'EURUSD', 'sell', 0.30, 1.08600, 1.08608, 0, 0, 0, -2.40, ago[6], 2026, 'grid 3', now(), 100000),
+    (acc, '7999010', '7999010', 'NAS100', 'buy', 1.00, 20120.00, 20135.00, 0, 0, 0, 15.00, ago[9], 2026, 'grid 1', now(), 1),
+    (acc, '7999011', '7999011', 'NAS100', 'buy', 1.00, 20090.00, 20135.00, 0, 0, 0, 45.00, ago[4], 2026, 'grid 2', now(), 1);
 
   -- Their baskets. Gold was at its deepest 3 market hours ago, at -2,300.
   -- Seen at every sync since they opened, the last one now.
@@ -406,7 +408,7 @@ begin
     broker = 'Sample data, not a real account',
     currency = 'USD',
     leverage = 500,
-    ea_version = '2026.10.17.4',
+    ea_version = '2026.10.17.5',
     last_sync_at = now(),
     balance = bal,
     equity = bal + float_all,
@@ -416,6 +418,11 @@ begin
     margin_level = round(((bal + float_all) / margin_now * 100)::numeric, 2),
     open_positions = 11,
     floating_pnl = float_all,
+    -- A typical retail broker's levels: margin call at 100% margin level,
+    -- stop-out at 50%.
+    stop_out_mode = 'percent',
+    margin_call_level = 100,
+    stop_out_level = 50,
     tracking_since = t_start,
     peak_equity = greatest(pk, bal + float_all),
     max_drawdown_pct = round(mdd, 4),
