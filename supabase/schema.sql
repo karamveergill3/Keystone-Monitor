@@ -157,7 +157,39 @@ alter table public.equity_samples enable row level security;
 drop policy if exists "members read equity samples" on public.equity_samples;
 
 -- ---------------------------------------------------------------------------
--- 5. Views. security_invoker, so the RLS above applies to whoever reads them.
+-- 5. Open positions: what each terminal has open right now.
+--
+-- A snapshot, not history: every sync from an EA that reports positions
+-- deletes the account's rows and inserts what it sent, so a position
+-- closed on the terminal disappears here at the next sync. A sync from an
+-- older EA that does not report them leaves the rows alone. Closed trades
+-- come from deals (account_positions below), never from this table.
+-- ---------------------------------------------------------------------------
+create table if not exists public.open_positions (
+  account_id    uuid not null references public.accounts (id) on delete cascade,
+  ticket        text not null,
+  symbol        text,
+  side          text check (side in ('buy', 'sell')),
+  volume        numeric,
+  open_price    numeric,
+  current_price numeric,
+  sl            numeric,
+  tp            numeric,
+  swap          numeric,
+  profit        numeric,
+  open_time     timestamptz,
+  magic         bigint,
+  comment       text,
+  updated_at    timestamptz not null default now(),
+  primary key (account_id, ticket)
+);
+
+alter table public.open_positions enable row level security;
+
+-- No policies (see projects above).
+
+-- ---------------------------------------------------------------------------
+-- 6. Views. security_invoker, so the RLS above applies to whoever reads them.
 --
 -- Days are London days. Keep LONDON in src/lib/days.js in step if this ever
 -- changes.
@@ -272,14 +304,15 @@ from money m
 full outer join record r on r.account_id = m.account_id and r.day = m.day;
 
 -- ---------------------------------------------------------------------------
--- 6. The browser roles get nothing. Only the server's service role reads.
+-- 7. The browser roles get nothing. Only the server's service role reads.
 -- ---------------------------------------------------------------------------
 revoke all on public.projects, public.accounts, public.account_keys,
-  public.deals, public.equity_samples, public.account_daily, public.account_positions
+  public.deals, public.equity_samples, public.open_positions,
+  public.account_daily, public.account_positions
   from anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- 7. Left over from when partners signed in: who could sign in, never any
+-- 8. Left over from when partners signed in: who could sign in, never any
 -- account data. A fresh database never has them; a re-run removes them
 -- from an older one. The policies that used is_member() are dropped above.
 -- ---------------------------------------------------------------------------

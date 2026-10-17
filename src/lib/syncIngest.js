@@ -2,10 +2,10 @@
 //
 // Kept out of the route so the tests can drive it with a fake client.
 //
-// ORDER MATTERS. Deals are stored before the account row is touched, and
-// any failure is a 500. The EA only moves its own watermark on a 200, so a
-// failed sync is simply sent again next time, and nothing is ever half
-// recorded.
+// ORDER MATTERS. Deals, the equity sample and the open positions are
+// stored before the account row is touched, and any failure is a 500. The
+// EA only moves its own watermark on a 200, so a failed sync is simply sent
+// again next time, and nothing is ever half recorded.
 
 import { bearerKey, hashSyncKey } from "./syncKeys.js";
 import { parseSyncPayload, SyncPayloadError, MAX_BODY_BYTES } from "./syncPayload.js";
@@ -134,6 +134,20 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
         { onConflict: "account_id,at", ignoreDuplicates: true }
       );
     if (error) throw new Error(`equity sample failed: ${error.message}`);
+  }
+
+  // Open positions are a snapshot, replaced whole: whatever is not in this
+  // sync has been closed. An EA too old to report them sends no list (null),
+  // and the rows are left as they are rather than wiped.
+  if (Array.isArray(payload.open)) {
+    const { error: clearErr } = await db.from("open_positions").delete().eq("account_id", account.id);
+    if (clearErr) throw new Error(`open positions clear failed: ${clearErr.message}`);
+    if (payload.open.length) {
+      const { error } = await db
+        .from("open_positions")
+        .insert(payload.open.map((p) => ({ account_id: account.id, ...p, updated_at: nowIso })));
+      if (error) throw new Error(`open positions insert failed: ${error.message}`);
+    }
   }
 
   const update = {

@@ -10,6 +10,8 @@ function fakeDb() {
   const keys = new Map();
   const deals = new Map();
   const samples = [];
+  // Keyed account_id:ticket, the table's primary key.
+  const open = new Map();
 
   function from(table) {
     const q = { table, filters: [] };
@@ -28,6 +30,14 @@ function fakeDb() {
       },
       update(obj) {
         q.update = obj;
+        return api;
+      },
+      delete() {
+        q.delete = true;
+        return api;
+      },
+      insert(rows) {
+        q.insert = rows;
         return api;
       },
       async maybeSingle() {
@@ -54,6 +64,20 @@ function fakeDb() {
         samples.push(...q.upsert.rows);
         return { data: null, error: null };
       }
+      if (table === "open_positions" && q.delete) {
+        for (const [id, r] of open) {
+          if (q.filters.every(([col, val]) => r[col] === val)) open.delete(id);
+        }
+        return { data: null, error: null };
+      }
+      if (table === "open_positions" && q.insert) {
+        const ids = q.insert.map((r) => `${r.account_id}:${r.ticket}`);
+        if (new Set(ids).size !== ids.length || ids.some((id) => open.has(id))) {
+          return { data: null, error: { message: "duplicate key value violates unique constraint" } };
+        }
+        q.insert.forEach((r, i) => open.set(ids[i], r));
+        return { data: null, error: null };
+      }
       if (table === "accounts" && q.update) {
         const [, id] = q.filters[0];
         accounts.set(id, { ...accounts.get(id), ...q.update });
@@ -64,7 +88,7 @@ function fakeDb() {
     return api;
   }
 
-  return { from, accounts, keys, deals, samples };
+  return { from, accounts, keys, deals, samples, open };
 }
 
 function setup() {
@@ -188,6 +212,63 @@ test("a backlog sent in pages does not record a drawdown that never happened", a
   const acc = db.accounts.get("acc-1");
   assert.equal(acc.max_drawdown_pct, 0);
   assert.equal(acc.peak_equity, 20_000);
+});
+
+function openTickets(db, accountId = "acc-1") {
+  return [...db.open.values()].filter((r) => r.account_id === accountId).map((r) => r.ticket).sort();
+}
+
+test("open positions are stored as a snapshot that each sync replaces", async () => {
+  const { db, key } = setup();
+  // Another account's positions are never touched by this one's sync.
+  db.open.set("acc-2:9", { account_id: "acc-2", ticket: "9", symbol: "EURUSD" });
+
+  await sync(db, key, payload());
+  assert.deepEqual(openTickets(db), ["1004", "1005"]);
+  const stored = db.open.get("acc-1:1004");
+  assert.equal(stored.symbol, "XAUUSD");
+  assert.equal(stored.side, "buy");
+  assert.equal(stored.profit, -48);
+  assert.equal(stored.open_time, "2026-10-03T07:30:00.123Z");
+  assert.equal(stored.updated_at, new Date(T0).toISOString());
+
+  // 1004 closed and a new one opened: only what the terminal has now.
+  const [, eur] = payload().open;
+  const added = { ...eur, ticket: "1010", profit: 3.2 };
+  const res = await sync(db, key, payload({ open: [eur, added] }), T0 + 60_000);
+  assert.equal(res.status, 200);
+  assert.deepEqual(openTickets(db), ["1005", "1010"]);
+  assert.equal(db.open.get("acc-1:1010").profit, 3.2);
+  assert.equal(db.open.get("acc-1:1005").updated_at, new Date(T0 + 60_000).toISOString());
+
+  // Everything closed.
+  await sync(db, key, payload({ open: [] }), T0 + 120_000);
+  assert.deepEqual(openTickets(db), []);
+  assert.deepEqual(openTickets(db, "acc-2"), ["9"]);
+});
+
+test("a sync from an EA that does not report positions leaves them alone", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  const old = payload({ ea: "2026.10.17" });
+  delete old.open;
+  const res = await sync(db, key, old, T0 + 60_000);
+  assert.equal(res.status, 200);
+  assert.deepEqual(openTickets(db), ["1004", "1005"]);
+  assert.equal(db.open.get("acc-1:1004").updated_at, new Date(T0).toISOString());
+  assert.equal(db.accounts.get("acc-1").ea_version, "2026.10.17");
+});
+
+test("a failed open positions write is a 500 the EA retries, before the account is touched", async () => {
+  const { db, key } = setup();
+  const from = db.from;
+  db.from = (table) => {
+    const api = from(table);
+    if (table !== "open_positions") return api;
+    return { ...api, delete: () => ({ eq: async () => ({ error: { message: "boom" } }) }) };
+  };
+  await assert.rejects(sync(db, key, payload()), /open positions clear failed: boom/);
+  assert.equal(db.accounts.get("acc-1").last_sync_at, undefined);
 });
 
 test("a trailing NUL from MQL5 is tolerated", async () => {

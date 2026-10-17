@@ -37,8 +37,17 @@ test("every field the server reads is one the EA sends", () => {
     "ea",
     ...Object.keys(p.account),
     ...Object.keys(p.deals[0]),
+    ...Object.keys(p.open[0]),
   ];
   for (const k of expected) assert.ok(sent.has(k), `EA does not send "${k}"`);
+});
+
+test("the EA sends its open positions, capped, in every page", () => {
+  assert.match(code, /#define MAX_OPEN\s+\d+/);
+  assert.match(code, /string BuildOpen\(\)/);
+  assert.match(code, /",\\"open\\":" \+ BuildOpen\(\)/);
+  // Open times are converted to UTC the same way deal times are.
+  assert.match(code, /MsToIso\(msc - \(long\)utcOffset \* 1000\)[\s\S]*MsToIso\(msc - \(long\)utcOffset \* 1000\)/);
 });
 
 test("the EA only counts a page as stored when the sync endpoint says ok", () => {

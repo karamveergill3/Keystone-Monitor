@@ -48,6 +48,8 @@ before(async () => {
       ('10000000-0000-0000-0000-000000000001', '3', '2', '2026-07-01 23:30Z', 'sell', 'out', 'trade', 'XAUUSD', 0.1, 2655, 50, -0.35, 49.65),
       ('10000000-0000-0000-0000-000000000001', '4', null, '2026-07-02 00:00Z', 'credit', 'in', 'credit', null, 0, 0, 500, 0, 500),
       ('10000000-0000-0000-0000-000000000001', '5', null, '2026-07-02 00:05Z', 'commission', 'in', 'other', null, 0, 0, -0.2, 0, -0.2);
+    insert into public.open_positions (account_id, ticket, symbol, side, volume, open_price, current_price, sl, tp, swap, profit, open_time, magic, comment) values
+      ('10000000-0000-0000-0000-000000000001', '6', 'XAUUSD', 'buy', 0.2, 2660.5, 2658.1, 2640, 2700, -0.5, -48, '2026-07-02 07:30Z', 100, 'grid 1');
   `);
 });
 
@@ -79,7 +81,7 @@ async function asServer(sql) {
   }
 }
 
-const READABLE = ["accounts", "deals", "equity_samples", "account_daily", "account_positions", "projects"];
+const READABLE = ["accounts", "deals", "equity_samples", "open_positions", "account_daily", "account_positions", "projects"];
 
 test("both projects are seeded once", async () => {
   const { rows } = await db.query("select slug from public.projects order by sort");
@@ -155,6 +157,34 @@ test("a netting reversal splits into the part closed and the part opened", async
   assert.equal(lots.rows[0].lots, 2);
 });
 
+test("open positions are a per-account snapshot that goes with its account", async () => {
+  await db.exec(`
+    insert into public.accounts (id, project_id, label)
+      select '40000000-0000-0000-0000-000000000004', id, 'Snapshot' from public.projects where slug = 'v100';
+    insert into public.open_positions (account_id, ticket, symbol, side, open_time) values
+      ('40000000-0000-0000-0000-000000000004', '31', 'EURUSD', 'sell', '2026-08-05 09:00Z'),
+      ('40000000-0000-0000-0000-000000000004', '32', 'EURUSD', null, '2026-08-05 09:01Z');
+  `);
+  const updated = await db.query(
+    "select updated_at is not null as stamped from public.open_positions where account_id = '40000000-0000-0000-0000-000000000004'"
+  );
+  assert.deepEqual(updated.rows, [{ stamped: true }, { stamped: true }]);
+  // One row per ticket per account, and only buy or sell as a side.
+  await assert.rejects(
+    db.exec("insert into public.open_positions (account_id, ticket) values ('40000000-0000-0000-0000-000000000004', '31')"),
+    /duplicate key/
+  );
+  await assert.rejects(
+    db.exec("insert into public.open_positions (account_id, ticket, side) values ('40000000-0000-0000-0000-000000000004', '33', 'long')"),
+    /check constraint/
+  );
+  await db.exec("delete from public.accounts where id = '40000000-0000-0000-0000-000000000004'");
+  const left = await db.query(
+    "select count(*)::int as n from public.open_positions where account_id = '40000000-0000-0000-0000-000000000004'"
+  );
+  assert.equal(left.rows[0].n, 0);
+});
+
 test("the server reads and writes everything, sync keys included", async () => {
   await asServer(`
     insert into public.equity_samples (account_id, at, balance, equity)
@@ -183,6 +213,11 @@ test("a browser writes nothing", async () => {
       as(userId, "insert into public.account_keys (account_id, key_hash, key_hint) values ('10000000-0000-0000-0000-000000000001', 'x', 'x')"),
       /permission denied/
     );
+    await assert.rejects(
+      as(userId, "insert into public.open_positions (account_id, ticket) values ('10000000-0000-0000-0000-000000000001', '99')"),
+      /permission denied/
+    );
+    await assert.rejects(as(userId, "delete from public.open_positions"), /permission denied/);
   }
 });
 

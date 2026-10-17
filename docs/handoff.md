@@ -4,6 +4,46 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
+## 2026-10-17 (Claude Code, Mac): Open positions on the account page
+
+### What changed
+
+- The EA (2026.10.17.2) now sends every open position, up to 200, on each
+  sync: ticket, symbol, side, lots, open and current price, SL, TP, swap,
+  profit, open time (UTC, same offset as deals), magic and comment.
+  `BuildOpen()` only reads; `tests/ea.test.mjs` still forbids any trading
+  call and now also checks the position fields are sent.
+- New table `open_positions` (section 5 of `schema.sql`; later sections
+  renumbered), RLS on, no policies, refused to the browser roles. Each sync
+  that carries positions deletes the account's rows and inserts the new
+  ones; a sync from an older EA (no `open` in the payload) leaves them.
+- The account page has an "Open positions" section after the charts:
+  margin, free margin and margin level as of the last sync, then the table.
+  With no rows but a non-zero position count it says the EA is older and
+  to install the latest one from the admin screen.
+
+### Why
+
+The owner wants the site to show what each terminal has open right now,
+along with the margin figures the EA already sent.
+
+### Watch out
+
+- **Run `supabase/schema.sql` on the live database before this reaches
+  `main`.** Until the table exists the account page fails its read and a
+  new EA's syncs get a 500 (old EAs keep syncing).
+- MQL5 cannot be compiled here. The new code uses only position reads
+  (`PositionsTotal`, `PositionGetTicket`, `PositionGetString/Integer/Double`),
+  but compile it once in MetaEditor before handing it out.
+
+### Still needs a human
+
+- [ ] Run `supabase/schema.sql` in the Supabase SQL editor, then deploy.
+- [ ] Compile the new EA in MetaEditor and replace it on each terminal
+      (download it again from the admin screen). Check the chart's corner
+      reads "... positions open" after a sync.
+
+---
 ## 2026-10-17 (Claude Code, Mac): Open to anyone with the link; live on Vercel
 
 ### What changed
