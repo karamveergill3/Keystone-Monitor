@@ -73,7 +73,7 @@ export default async function AccountPage({ params, searchParams }) {
               : "Waiting for the EA's first sync"}
           </p>
         </div>
-        <div className="text-right text-xs text-muted">
+        <div className="text-xs text-muted sm:text-right">
           <p className="inline-flex items-center gap-2">
             <StatusDot status={row.status} /> Last sync {ago(account.last_sync_at)}
           </p>
@@ -81,7 +81,7 @@ export default async function AccountPage({ params, searchParams }) {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile label="Balance" sub={Number(account.credit) > 0 ? `Plus ${money(account.credit, c)} broker credit, not counted` : null}>
           {money(row.balance, c)}
         </StatTile>
@@ -126,12 +126,12 @@ export default async function AccountPage({ params, searchParams }) {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-semibold">Profit and loss</h2>
-          <div className="flex gap-1 rounded-md border border-line p-0.5 text-xs">
+          <div className="flex gap-1 rounded-lg bg-panel-2 p-1 text-sm">
             {VIEWS.map((v) => (
               <Link
                 key={v}
                 href={hrefWith(path, query, { view: v === "calendar" ? null : v, page: null })}
-                className={`rounded px-2.5 py-1 capitalize ${view === v ? "bg-panel-2 text-ink" : "text-muted hover:text-ink"}`}
+                className={`rounded-md px-3 py-1 capitalize ${view === v ? "bg-panel font-medium text-ink shadow-sm" : "text-muted hover:text-ink"}`}
               >
                 {v === "calendar" ? "Days" : v}
               </Link>

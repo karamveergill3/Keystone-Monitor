@@ -6,6 +6,7 @@ import { listProjects, listAccounts, dailyFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { todayKey } from "@/lib/days";
 import { dayLabel } from "@/lib/format";
+import { projectTint } from "@/lib/ui";
 
 export const metadata = { title: "Overview" };
 
@@ -29,12 +30,12 @@ export default async function OverviewPage() {
         return (
           <section key={p.id} className="space-y-3">
             <div className="flex items-baseline justify-between">
-              <h2 className="text-lg font-semibold">{p.name}</h2>
+              <h2 className="flex items-center gap-2 text-lg font-semibold"><span className={`h-2.5 w-2.5 rounded-full ${projectTint(p.sort).dot}`} />{p.name}</h2>
               <Link href={`/projects/${p.slug}`} className="text-sm text-accent hover:underline">
                 Monthly breakdown and reports
               </Link>
             </div>
-            <CurrencyTotals totals={currencyTotals(projectRows)} />
+            <CurrencyTotals totals={currencyTotals(projectRows)} tint={projectTint(p.sort).tint} />
             <AccountsTable rows={projectRows} />
           </section>
         );

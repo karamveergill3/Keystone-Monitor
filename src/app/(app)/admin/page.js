@@ -37,21 +37,21 @@ export default async function AdminPage() {
         <AddAccountForm projects={projects} />
         <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
           <table className="w-full min-w-[960px] text-sm">
-            <thead className="text-left text-xs text-muted">
+            <thead className="bg-panel-2/70 text-left text-xs text-muted">
               <tr className="border-b border-line">
-                <th className="px-3 py-2 font-medium">Name and project</th>
-                <th className="px-3 py-2 font-medium">Login</th>
-                <th className="px-3 py-2 font-medium">Key</th>
-                <th className="px-3 py-2 font-medium">Last sync</th>
-                <th className="px-3 py-2 font-medium">Actions</th>
+                <th className="px-4 py-2.5 font-medium">Name and project</th>
+                <th className="px-4 py-2.5 font-medium">Login</th>
+                <th className="px-4 py-2.5 font-medium">Key</th>
+                <th className="px-4 py-2.5 font-medium">Last sync</th>
+                <th className="px-4 py-2.5 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
               {accounts.map((a) => {
                 const key = keys.get(a.id);
                 return (
-                  <tr key={a.id} className={`border-b border-line/60 align-top last:border-0 ${a.archived_at ? "opacity-60" : ""}`}>
-                    <td className="px-3 py-2">
+                  <tr key={a.id} className={`border-b border-line/70 align-top last:border-0 ${a.archived_at ? "opacity-60" : ""}`}>
+                    <td className="px-4 py-2.5">
                       <form action={updateAccount} className="flex gap-2">
                         <input type="hidden" name="accountId" value={a.id} />
                         <input name="label" defaultValue={a.label} maxLength={80} className={`${inputClass} w-48 py-1`} aria-label="Name" />
@@ -64,7 +64,7 @@ export default async function AdminPage() {
                       </form>
                       {a.archived_at && <p className="mt-1 text-xs text-warn">Archived {londonTime(a.archived_at)}</p>}
                     </td>
-                    <td className="px-3 py-2 text-xs">
+                    <td className="px-4 py-2.5 text-xs">
                       {a.account_number ? (
                         <>
                           <Link href={`/accounts/${a.id}`} className="hover:text-accent">{a.account_number}</Link>
@@ -74,15 +74,15 @@ export default async function AdminPage() {
                         <span className="text-muted">Not connected</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-muted">{key ? `...${key.key_hint}` : "none"}</td>
-                    <td className="px-3 py-2 text-xs text-muted">
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted">{key ? `...${key.key_hint}` : "none"}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted">
                       <span className="inline-flex items-center gap-2">
                         <StatusDot status={syncStatus(a.last_sync_at)} /> {ago(a.last_sync_at)}
                       </span>
                       {a.ea_version && <span className="block">EA {a.ea_version}</span>}
                       {a.resync_requested && <span className="block text-warn">Resync requested</span>}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-4 py-2.5">
                       <div className="flex flex-wrap gap-2">
                         <RotateKeyForm accountId={a.id} label={a.label} hasKey={Boolean(key)} />
                         {a.account_number && !a.resync_requested && (

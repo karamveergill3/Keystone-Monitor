@@ -1,25 +1,55 @@
 @import "tailwindcss";
 
 /* Every colour in the app is one of these. New colours go here, not as
-   one-off hex values in a component. */
-@theme {
-  --color-bg: #0b1020;
-  --color-panel: #121a2e;
-  --color-panel-2: #18223a;
-  --color-line: #24304d;
-  --color-ink: #e7ecf6;
-  --color-muted: #8d99b3;
-  --color-accent: #5b8cff;
-  --color-up: #2fbf71;
-  --color-down: #f0555a;
-  --color-warn: #f2b84b;
+   one-off hex values in a component.
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+   Warm paper and near-black ink, with pastel fills for state. Pastels are
+   for backgrounds only: every text colour here is at least 4.9:1 against
+   the bg, panel and panel-2 surfaces, and against its own soft fill. */
+@theme {
+  --color-bg: #f7f3ec;
+  --color-panel: #ffffff;
+  --color-panel-2: #f2ede4;
+  --color-line: #e5ddd0;
+  --color-ink: #26221d;
+  --color-muted: #665f55;
+  --color-accent: #3b55a0;
+  --color-accent-soft: #e2e8f8;
+  --color-up: #24724e;
+  --color-up-soft: #e2f1e7;
+  --color-down: #ae3b45;
+  --color-down-soft: #f9e4e4;
+  --color-warn: #8a5a0e;
+  --color-warn-soft: #fbefd3;
+
+  /* Project identity tints, in project sort order. Backgrounds only. */
+  --color-tint-1: #e8edf9;
+  --color-tint-2: #fbeadd;
+  --color-tint-3: #e5f1ea;
+  --color-tint-4: #f1e7f4;
+
+  /* Chart series: periwinkle and apricot, checked for colour-blind
+     separation. Lines only, never text. */
+  --color-series-1: #5b74c4;
+  --color-series-2: #c46a30;
+
+  --font-sans: var(--font-plex), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* One step larger than Tailwind's defaults: the pages are dense with
+     figures, and the small sizes carry labels people need to read. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.5rem;
+  --text-base: 1rem;
+  --text-lg: 1.1875rem;
+  --text-xl: 1.5rem;
+  --text-xl--line-height: 2rem;
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
@@ -31,8 +61,5 @@ body {
 
 .num {
   font-variant-numeric: tabular-nums;
-}
-
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.8);
+  font-feature-settings: "tnum";
 }

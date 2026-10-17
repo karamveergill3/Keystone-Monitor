@@ -13,15 +13,23 @@ export default async function AppLayout({ children }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-panel/60">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link href="/" className="text-sm font-semibold tracking-wide">{APP_NAME}</Link>
-          <nav className="flex flex-wrap gap-4 text-sm text-muted">
-            <Link href="/" className="hover:text-ink">Overview</Link>
+      <header className="border-b border-line bg-panel">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3.5">
+          <Link href="/" className="flex items-center gap-2.5 text-base font-semibold">
+            <span aria-hidden className="grid h-6 w-6 grid-cols-2 gap-0.5 rounded-md bg-panel-2 p-1">
+              <span className="rounded-sm bg-series-1/70" />
+              <span className="rounded-sm bg-up/50" />
+              <span className="rounded-sm bg-warn/40" />
+              <span className="rounded-sm bg-series-2/60" />
+            </span>
+            {APP_NAME}
+          </Link>
+          <nav className="flex flex-wrap gap-1 text-sm text-muted">
+            <Link href="/" className="rounded-md px-2.5 py-1 hover:bg-panel-2 hover:text-ink">Overview</Link>
             {projects.map((p) => (
-              <Link key={p.id} href={`/projects/${p.slug}`} className="hover:text-ink">{p.name}</Link>
+              <Link key={p.id} href={`/projects/${p.slug}`} className="rounded-md px-2.5 py-1 hover:bg-panel-2 hover:text-ink">{p.name}</Link>
             ))}
-            {admin && <Link href="/admin" className="hover:text-ink">Admin</Link>}
+            {admin && <Link href="/admin" className="rounded-md px-2.5 py-1 hover:bg-panel-2 hover:text-ink">Admin</Link>}
           </nav>
           {admin && (
             <form action={adminSignOut} className="ml-auto text-xs text-muted">
@@ -30,7 +38,7 @@ export default async function AppLayout({ children }) {
           )}
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
     </div>
   );
 }

@@ -6,7 +6,7 @@ export default function KeyReveal({ state }) {
   if (!state?.ok || !state.key) return null;
   const origin = new URL(state.syncUrl).origin;
   return (
-    <div className="mt-4 space-y-3 rounded-lg border border-warn/40 bg-warn/5 p-4 text-sm">
+    <div className="mt-4 space-y-3 rounded-lg border border-warn/30 bg-warn-soft p-4 text-sm">
       <p className="font-medium text-warn">Sync key for {state.label}. Copy it now: it will not be shown again.</p>
       <CopyField value={state.key} label="SyncKey (EA input)" />
       <CopyField value={state.syncUrl} label="SyncUrl (EA input)" />

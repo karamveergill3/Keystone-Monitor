@@ -8,6 +8,7 @@ import { listProjects, listAccounts, dailyFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { groupPeriods } from "@/lib/accountStats";
 import { todayKey, monthStart, addMonths } from "@/lib/days";
+import { projectTint } from "@/lib/ui";
 
 const MONTHS_SHOWN = 6;
 
@@ -37,10 +38,10 @@ export default async function ProjectPage({ params }) {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">{project.name}</h1>
+        <h1 className="flex items-center gap-2.5 text-xl font-semibold"><span className={`h-3 w-3 rounded-full ${projectTint(project.sort).dot}`} />{project.name}</h1>
         <p className="text-sm text-muted">{accounts.length} {accounts.length === 1 ? "account" : "accounts"}</p>
       </div>
-      <CurrencyTotals totals={currencyTotals(rows)} />
+      <CurrencyTotals totals={currencyTotals(rows)} tint={projectTint(project.sort).tint} />
       <AccountsTable rows={rows} />
       <section className="space-y-3">
         <h2 className="text-base font-semibold">By month</h2>

@@ -7,7 +7,7 @@ export default function Pnl({ value, currency, gain, decimals = 2 }) {
     <span className={`num ${tone}`}>
       {money(value, currency, { sign: true, decimals })}
       {gain !== undefined && gain !== null && (
-        <span className="block text-[11px] opacity-80">{pct(gain, { sign: true })}</span>
+        <span className="block text-xs opacity-80">{pct(gain, { sign: true })}</span>
       )}
     </span>
   );
