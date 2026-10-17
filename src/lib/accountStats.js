@@ -29,6 +29,11 @@ export function normaliseDaily(rows) {
       day: String(r.day).slice(0, 10),
       tradePnl: n(r.trade_pnl),
       cashFlow: n(r.cash_flow),
+      // Kept apart from cash_flow, which nets them, so a day with a deposit
+      // and a withdrawal reports both. Older rows without the columns fall
+      // back to the net's sign.
+      deposits: r.deposits === undefined ? Math.max(0, n(r.cash_flow)) : n(r.deposits),
+      withdrawals: r.withdrawals === undefined ? Math.min(0, n(r.cash_flow)) : n(r.withdrawals),
       closed: n(r.closed),
       wins: n(r.wins),
       losses: n(r.losses),
@@ -52,7 +57,7 @@ export function dailyReturns(daily, currentBalance) {
     const d = daily[i];
     const endBalance = running;
     const startBalance = endBalance - d.tradePnl - d.cashFlow;
-    const base = startBalance + Math.max(0, d.cashFlow);
+    const base = startBalance + d.deposits;
     out[i] = { ...d, startBalance, endBalance, ret: base > 0 ? d.tradePnl / base : 0 };
     running = startBalance;
   }
@@ -109,8 +114,8 @@ export function summarise(daily, currentBalance, { from = null, to = null } = {}
   let best = null, worst = null, tradingDays = 0;
   for (const r of returns) {
     tradePnl += r.tradePnl;
-    if (r.cashFlow > 0) deposits += r.cashFlow;
-    else withdrawals += r.cashFlow;
+    deposits += r.deposits;
+    withdrawals += r.withdrawals;
     closed += r.closed;
     wins += r.wins;
     losses += r.losses;

@@ -13,7 +13,7 @@ export function accountRow(account, daily, today, now = Date.now()) {
     equity,
     currency: account.currency || "USD",
     status: syncStatus(account.last_sync_at, now),
-    floatingDd: floatingDrawdownPct(balance, equity),
+    floatingDd: floatingDrawdownPct(balance, equity, Number(account.credit ?? 0)),
     maxDd: Number(account.max_drawdown_pct ?? 0),
     periods: periodFigures(daily ?? [], balance, today),
   };

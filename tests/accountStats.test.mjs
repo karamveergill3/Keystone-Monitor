@@ -85,6 +85,15 @@ test("weeks and months group newest first", () => {
   assert.equal(months[0].endBalance, BALANCE);
 });
 
+test("a deposit and a withdrawal on the same day are both reported", () => {
+  const day = normaliseDaily([
+    { account_id: "a", day: "2026-10-01", trade_pnl: 0, cash_flow: 3000, deposits: 5000, withdrawals: -2000, closed: 0, wins: 0, losses: 0, gross_profit: 0, gross_loss: 0, lots: 0 },
+  ]);
+  const s = summarise(day, 3000);
+  assert.equal(s.deposits, 5000);
+  assert.equal(s.withdrawals, -2000);
+});
+
 test("an account that never synced has no balance figures", () => {
   const s = summarise(rows, null);
   assert.equal(s.startBalance, null);

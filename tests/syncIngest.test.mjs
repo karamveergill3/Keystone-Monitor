@@ -97,7 +97,9 @@ test("the first sync binds the account and stores its history", async () => {
   const { db, key } = setup();
   const res = await sync(db, key, payload());
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { ok: true, stored: 3, resync: false, interval: 120 });
+  // The binding sync asks for the whole history, in case this terminal
+  // already sent the login somewhere else and its watermark has moved on.
+  assert.deepEqual(res.body, { ok: true, stored: 3, resync: true, interval: 120 });
   const acc = db.accounts.get("acc-1");
   assert.equal(acc.account_number, "51234567");
   assert.equal(acc.server, "Broker-Live");
@@ -156,9 +158,36 @@ test("unknown keys, archived accounts and bad bodies are refused", async () => {
 
 test("a requested resync is sent once and then cleared", async () => {
   const { db, key } = setup();
+  await sync(db, key, payload());
+  assert.equal((await sync(db, key, payload())).body.resync, false);
   db.accounts.get("acc-1").resync_requested = true;
   assert.equal((await sync(db, key, payload())).body.resync, true);
   assert.equal((await sync(db, key, payload())).body.resync, false);
+});
+
+test("a backlog sent in pages does not record a drawdown that never happened", async () => {
+  const { db, key } = setup();
+  // Tracked at 10,000.
+  const first = payload({ deals: [] });
+  first.account.balance = first.account.equity = 10_000;
+  await sync(db, key, first);
+
+  // An outage, during which 10,000 is deposited. Page 1 of the backlog
+  // carries today's 20,000 equity but only older deals; page 2 the deposit.
+  const deposit = {
+    ticket: "3001", position: "0", time: "2026-10-17T13:00:00Z", type: "DEAL_TYPE_BALANCE",
+    entry: "DEAL_ENTRY_IN", profit: 10_000, swap: 0, commission: 0, fee: 0,
+  };
+  const page1 = payload({ deals: [], more: true });
+  page1.account.balance = page1.account.equity = 20_000;
+  const page2 = payload({ deals: [deposit], more: false });
+  page2.account.balance = page2.account.equity = 20_000;
+  await sync(db, key, page1, T0 + 3_600_000);
+  await sync(db, key, page2, T0 + 3_600_000 + 1000);
+
+  const acc = db.accounts.get("acc-1");
+  assert.equal(acc.max_drawdown_pct, 0);
+  assert.equal(acc.peak_equity, 20_000);
 });
 
 test("a trailing NUL from MQL5 is tolerated", async () => {

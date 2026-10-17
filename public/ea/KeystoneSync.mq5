@@ -42,9 +42,13 @@ string   g_status = "starting";
 
 int OnInit()
   {
-   if(StringFind(SyncUrl, "https://") != 0)
+   // The full sync address, not just the site: the site's own pages also
+   // answer 200, and a sync that "succeeded" against one would move the
+   // watermark past history that was never stored.
+   int urlLen = StringLen(SyncUrl);
+   if(StringFind(SyncUrl, "https://") != 0 || urlLen < 17 || StringSubstr(SyncUrl, urlLen - 9) != "/api/sync")
      {
-      Alert("KeystoneSync: SyncUrl must be the https:// address from the admin screen.");
+      Alert("KeystoneSync: SyncUrl must be the full https://.../api/sync address from the admin screen.");
       return(INIT_PARAMETERS_INCORRECT);
      }
    if(StringFind(SyncKey, "ptk_") != 0)
@@ -299,11 +303,14 @@ int SendPage(bool &more)
       Print("KeystoneSync: ", g_status);
       return status;
      }
-   if(status != 200)
+   // Stored only when the sync endpoint itself says so. Anything else
+   // answering 200 (a login page reached by a redirect, a captive portal)
+   // must not move the watermark.
+   if(status != 200 || StringFind(text, "\"ok\":true") < 0)
      {
       g_status = "HTTP " + IntegerToString(status) + ": " + StringSubstr(text, 0, 200);
       Print("KeystoneSync: ", g_status);
-      return status;
+      return(status == 200 ? -2 : status);
      }
 
    // Stored: move the watermark to the last deal sent. The deals in that

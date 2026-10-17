@@ -32,6 +32,8 @@ Partners (password + 2FA)  --->                                       account_po
   through the service role after a server-side admin check.
 - **Invite only, no email needed.** The admin screen makes invite and
   password-reset links to send directly (WhatsApp, Telegram, anything).
+  Opening a link only shows a Continue button, so a messenger fetching it
+  for a preview does not use it up.
 
 ## What the figures mean
 

@@ -122,7 +122,7 @@ export async function deleteUnusedAccount(formData) {
 async function linkFor(db, type, email) {
   const { data, error } = await db.auth.admin.generateLink({ type, email });
   if (error) return { error };
-  const link = `${await appOrigin()}/auth/confirm?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=${type}`;
+  const link = `${await appOrigin()}/confirm?token_hash=${encodeURIComponent(data.properties.hashed_token)}&type=${type}`;
   return { link, userId: data.user.id };
 }
 
@@ -144,13 +144,32 @@ export async function inviteMember(_prev, formData) {
   }
   if (result.error) return { ok: false, message: result.error.message };
 
-  const { error } = await db
+  // AN EXISTING MEMBER KEEPS THEIR ROLE. Re-inviting someone whose link
+  // expired is an ordinary thing to do, and the form defaults to Partner:
+  // overwriting the row would demote an admin, and could leave nobody able
+  // to administer the site. Roles change only through setRole, which
+  // guards against that.
+  const { data: existing, error: readErr } = await db
     .from("members")
-    .upsert({ user_id: result.userId, email, display_name: displayName, role }, { onConflict: "user_id" });
-  if (error) return { ok: false, message: error.message };
+    .select("role")
+    .eq("user_id", result.userId)
+    .maybeSingle();
+  if (readErr) return { ok: false, message: readErr.message };
+
+  if (!existing) {
+    const { error } = await db
+      .from("members")
+      .insert({ user_id: result.userId, email, display_name: displayName, role });
+    if (error) return { ok: false, message: error.message };
+  }
 
   done();
-  return { ok: true, email, link: result.link };
+  return {
+    ok: true,
+    email,
+    link: result.link,
+    note: existing ? `Already a member (${existing.role}); role unchanged. This link sets a new password.` : null,
+  };
 }
 
 export async function resetLink(_prev, formData) {

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 // Pages anyone may load. Everything else needs a session; whether that
 // session is a member with two-factor is decided by requireMember() on the
 // page itself, which can read the database.
-const PUBLIC = /^\/(login|auth\/|no-access$)/;
+const PUBLIC = /^\/(login|confirm$|auth\/|no-access$)/;
 
 // Refreshes the Supabase session cookie on every page request, and sends
 // anybody without one to /login.

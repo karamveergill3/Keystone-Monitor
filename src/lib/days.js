@@ -1,7 +1,7 @@
 // London days, as YYYY-MM-DD keys.
 //
-// Every "today", "this week" and "this month" in the app is a London day,
-// the same calendar ForexDNA uses. The account_daily view in
+// Every "today", "this week" and "this month" in the app is a London day.
+// The account_daily view in
 // supabase/schema.sql buckets deals with the same zone; keep the two in
 // step.
 //

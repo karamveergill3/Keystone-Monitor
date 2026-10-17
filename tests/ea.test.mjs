@@ -41,6 +41,12 @@ test("every field the server reads is one the EA sends", () => {
   for (const k of expected) assert.ok(sent.has(k), `EA does not send "${k}"`);
 });
 
+test("the EA only counts a page as stored when the sync endpoint says ok", () => {
+  assert.match(code, /StringFind\(text, "\\"ok\\":true"\) < 0/);
+  // The raw source: stripping // comments would also cut "https://" lines.
+  assert.match(EA, /StringSubstr\(SyncUrl, urlLen - 9\) != "\/api\/sync"/);
+});
+
 test("the EA authenticates the way the server expects", () => {
   assert.match(code, /Authorization: Bearer " \+ SyncKey/);
   assert.match(code, new RegExp(`StringFind\\(SyncKey, "${KEY_PREFIX}"\\)`));

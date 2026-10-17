@@ -75,7 +75,7 @@ test("both projects are seeded once", async () => {
 
 test("account_daily buckets by London day and keeps cash and credit out of P&L", async () => {
   const { rows } = await db.query(
-    "select day::text as day, trade_pnl::float8 as trade_pnl, cash_flow::float8 as cash_flow, closed::int as closed, wins::int as wins from public.account_daily order by day"
+    "select day::text as day, trade_pnl::float8 as trade_pnl, cash_flow::float8 as cash_flow, closed::int as closed, wins::int as wins from public.account_daily where account_id = '10000000-0000-0000-0000-000000000001' order by day"
   );
   // 22:30Z and 23:30Z on 1 July are 23:30 and 00:30 London (BST):
   // the opening commission is on the 1st, the close and the charge on the 2nd.
@@ -87,18 +87,68 @@ test("account_daily buckets by London day and keeps cash and credit out of P&L",
 
 test("account_positions joins the open and close of a position", async () => {
   const { rows } = await db.query(
-    "select side, symbol, open_price::float8 as open_price, close_price::float8 as close_price, net::float8 as net, volume_in::float8 as volume_in from public.account_positions"
+    "select side, symbol, open_price::float8 as open_price, close_price::float8 as close_price, net::float8 as net, volume_in::float8 as volume_in from public.account_positions where account_id = '10000000-0000-0000-0000-000000000001'"
   );
   assert.deepEqual(rows, [{ side: "buy", symbol: "XAUUSD", open_price: 2650, close_price: 2655, net: 49.3, volume_in: 0.1 }]);
 });
 
+test("the trade record counts positions, not closing deals", async () => {
+  await db.exec(`
+    insert into public.accounts (id, project_id, label)
+      select '20000000-0000-0000-0000-000000000002', id, 'Record' from public.projects where slug = 'v100';
+    insert into public.deals (account_id, ticket, position_id, time, type, entry, kind, symbol, volume, price, profit, commission, net) values
+      -- Commission both sides: the exit deal is +1.50 but the trade lost 2.00.
+      ('20000000-0000-0000-0000-000000000002', '11', '11', '2026-08-03 09:00Z', 'buy',  'in',  'trade', 'EURUSD', 1, 1.1000, 0, -3.5, -3.5),
+      ('20000000-0000-0000-0000-000000000002', '12', '11', '2026-08-03 10:00Z', 'sell', 'out', 'trade', 'EURUSD', 1, 1.1001, 5, -3.5,  1.5),
+      -- One lot closed in two halves: one trade, not two.
+      ('20000000-0000-0000-0000-000000000002', '13', '13', '2026-08-03 09:00Z', 'buy',  'in',  'trade', 'XAUUSD', 1, 2600, 0, 0, 0),
+      ('20000000-0000-0000-0000-000000000002', '14', '13', '2026-08-03 11:00Z', 'sell', 'out', 'trade', 'XAUUSD', 0.5, 2601, 50, 0, 50),
+      ('20000000-0000-0000-0000-000000000002', '15', '13', '2026-08-03 12:00Z', 'sell', 'out', 'trade', 'XAUUSD', 0.5, 2603, 150, 0, 150),
+      -- A deposit and a withdrawal on the same day are both reported.
+      ('20000000-0000-0000-0000-000000000002', '16', null, '2026-08-03 08:00Z', 'balance', 'in', 'cash', null, 0, 0, 5000, 0, 5000),
+      ('20000000-0000-0000-0000-000000000002', '17', null, '2026-08-03 18:00Z', 'balance', 'in', 'cash', null, 0, 0, -2000, 0, -2000);
+  `);
+  const { rows } = await db.query(
+    `select closed::int, wins::int, losses::int, gross_profit::float8, gross_loss::float8, lots::float8,
+            trade_pnl::float8, cash_flow::float8, deposits::float8, withdrawals::float8
+       from public.account_daily where account_id = '20000000-0000-0000-0000-000000000002'`
+  );
+  assert.deepEqual(rows, [
+    { closed: 2, wins: 1, losses: 1, gross_profit: 200, gross_loss: -2, lots: 2, trade_pnl: 198, cash_flow: 3000, deposits: 5000, withdrawals: -2000 },
+  ]);
+});
+
+test("a netting reversal splits into the part closed and the part opened", async () => {
+  await db.exec(`
+    insert into public.accounts (id, project_id, label)
+      select '30000000-0000-0000-0000-000000000003', id, 'Netting' from public.projects where slug = 'v100';
+    insert into public.deals (account_id, ticket, position_id, time, type, entry, kind, symbol, volume, price, profit, net) values
+      ('30000000-0000-0000-0000-000000000003', '21', '21', '2026-08-04 09:00Z', 'buy',  'in',    'trade', 'EURUSD', 1, 1.10, 0, 0),
+      ('30000000-0000-0000-0000-000000000003', '22', '21', '2026-08-04 10:00Z', 'sell', 'inout', 'trade', 'EURUSD', 2, 1.11, 100, 100);
+  `);
+  const q = `select volume_in::float8, volume_out::float8, open_price::float8, close_price::float8
+               from public.account_positions where account_id = '30000000-0000-0000-0000-000000000003'`;
+  // 1 lot bought, then a 2-lot sell: 1 lot closed at 1.11 and 1 lot sold
+  // short at 1.11, still open.
+  assert.deepEqual((await db.query(q)).rows, [{ volume_in: 2, volume_out: 1, open_price: 1.105, close_price: 1.11 }]);
+  await db.exec(`
+    insert into public.deals (account_id, ticket, position_id, time, type, entry, kind, symbol, volume, price, profit, net) values
+      ('30000000-0000-0000-0000-000000000003', '23', '21', '2026-08-04 11:00Z', 'buy', 'out', 'trade', 'EURUSD', 1, 1.12, -100, -100);
+  `);
+  assert.deepEqual((await db.query(q)).rows, [{ volume_in: 2, volume_out: 2, open_price: 1.105, close_price: 1.115 }]);
+  const lots = await db.query(
+    "select sum(lots)::float8 as lots from public.account_daily where account_id = '30000000-0000-0000-0000-000000000003'"
+  );
+  assert.equal(lots.rows[0].lots, 2);
+});
+
 test("a member with two-factor reads everything", async () => {
-  const accounts = await as(ADMIN, "aal2", "select id from public.accounts");
-  assert.equal(accounts.rows.length, 1);
-  const deals = await as(ADMIN, "aal2", "select ticket from public.deals");
-  assert.equal(deals.rows.length, 5);
-  const daily = await as(ADMIN, "aal2", "select * from public.account_daily");
-  assert.equal(daily.rows.length, 2);
+  for (const table of ["accounts", "deals", "account_daily", "account_positions", "projects"]) {
+    const all = (await db.query(`select count(*)::int as n from public.${table}`)).rows[0].n;
+    const seen = await as(ADMIN, "aal2", `select * from public.${table}`);
+    assert.ok(all > 0, table);
+    assert.equal(seen.rows.length, all, table);
+  }
 });
 
 test("a password alone reads nothing but its own member row", async () => {

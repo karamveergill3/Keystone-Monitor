@@ -205,50 +205,117 @@ create policy "members read equity samples"
 -- ---------------------------------------------------------------------------
 -- 6. Views. security_invoker, so the RLS above applies to whoever reads them.
 --
--- Days are London days, the same calendar ForexDNA uses. Keep LONDON in
--- src/lib/days.js in step if this ever changes.
+-- Days are London days. Keep LONDON in src/lib/days.js in step if this ever
+-- changes.
+--
+-- COLUMNS ARE ONLY EVER ADDED AT THE END. "create or replace view" refuses
+-- to rename, reorder or retype an existing column, and this file must stay
+-- re-runnable against a database that already has the views.
 -- ---------------------------------------------------------------------------
 
--- One row per account per day with any deal on it.
-create or replace view public.account_daily
-with (security_invoker = true) as
-select
-  d.account_id,
-  (d.time at time zone 'Europe/London')::date                                     as day,
-  coalesce(sum(d.net) filter (where d.kind in ('trade', 'other')), 0)             as trade_pnl,
-  coalesce(sum(d.net) filter (where d.kind = 'cash'), 0)                          as cash_flow,
-  count(*) filter (where d.kind = 'trade' and d.entry in ('out', 'inout', 'out_by')) as closed,
-  count(*) filter (where d.kind = 'trade' and d.entry in ('out', 'inout', 'out_by') and d.net > 0) as wins,
-  count(*) filter (where d.kind = 'trade' and d.entry in ('out', 'inout', 'out_by') and d.net < 0) as losses,
-  coalesce(sum(d.net) filter (where d.kind = 'trade' and d.entry in ('out', 'inout', 'out_by') and d.net > 0), 0) as gross_profit,
-  coalesce(sum(d.net) filter (where d.kind = 'trade' and d.entry in ('out', 'inout', 'out_by') and d.net < 0), 0) as gross_loss,
-  coalesce(sum(d.volume) filter (where d.kind = 'trade' and d.entry in ('out', 'inout', 'out_by')), 0) as lots
-from public.deals d
-group by d.account_id, (d.time at time zone 'Europe/London')::date;
-
 -- One row per position that has been at least partly closed.
+--
+-- A deal's volume is split into the part that opened exposure and the part
+-- that closed it. On a hedging account that is simple: "in" opens, "out"
+-- closes. On a netting account an "inout" deal reverses the position,
+-- closing what was open and opening the rest the other way under the same
+-- position id, so its closing part is the size of the position just before
+-- it. Without the split a 1-lot buy reversed into a 1-lot sell read as
+-- 3 lots closed.
 create or replace view public.account_positions
 with (security_invoker = true) as
+with legs as (
+  select
+    d.*,
+    abs(coalesce(sum(case when d.type = 'buy' then d.volume else -d.volume end) over (
+      partition by d.account_id, d.position_id
+      order by d.time, d.ticket::numeric
+      rows between unbounded preceding and 1 preceding
+    ), 0)) as open_before
+  from public.deals d
+  where d.type in ('buy', 'sell') and d.position_id is not null
+),
+parts as (
+  select
+    l.*,
+    case l.entry
+      when 'in' then l.volume
+      when 'inout' then greatest(l.volume - l.open_before, 0)
+      else 0
+    end as opened,
+    case
+      when l.entry in ('out', 'out_by') then l.volume
+      when l.entry = 'inout' then least(l.volume, l.open_before)
+      else 0
+    end as closed
+  from legs l
+)
 select
-  d.account_id,
-  d.position_id,
-  min(d.symbol)                                                         as symbol,
+  p.account_id,
+  p.position_id,
+  min(p.symbol)                                                         as symbol,
   -- The opening deal's own direction. A buy position is closed by a sell,
   -- so the closing deal's type is the opposite of the trade's.
-  (array_agg(d.type order by d.time) filter (where d.entry = 'in'))[1] as side,
-  min(d.time) filter (where d.entry = 'in')                             as open_time,
-  max(d.time) filter (where d.entry in ('out', 'inout', 'out_by'))      as close_time,
-  coalesce(sum(d.volume) filter (where d.entry = 'in'), 0)              as volume_in,
-  coalesce(sum(d.volume) filter (where d.entry in ('out', 'inout', 'out_by')), 0) as volume_out,
-  sum(d.price * d.volume) filter (where d.entry = 'in')
-    / nullif(sum(d.volume) filter (where d.entry = 'in'), 0)            as open_price,
-  sum(d.price * d.volume) filter (where d.entry in ('out', 'inout', 'out_by'))
-    / nullif(sum(d.volume) filter (where d.entry in ('out', 'inout', 'out_by')), 0) as close_price,
-  sum(d.net)                                                            as net
-from public.deals d
-where d.kind = 'trade' and d.position_id is not null
-group by d.account_id, d.position_id
-having count(*) filter (where d.entry in ('out', 'inout', 'out_by')) > 0;
+  (array_agg(p.type order by p.time, p.ticket::numeric) filter (where p.entry = 'in'))[1] as side,
+  min(p.time) filter (where p.entry = 'in')                             as open_time,
+  max(p.time) filter (where p.closed > 0)                               as close_time,
+  coalesce(sum(p.opened), 0)                                            as volume_in,
+  coalesce(sum(p.closed), 0)                                            as volume_out,
+  sum(p.price * p.opened) / nullif(sum(p.opened), 0)                    as open_price,
+  sum(p.price * p.closed) / nullif(sum(p.closed), 0)                    as close_price,
+  sum(p.net)                                                            as net
+from parts p
+group by p.account_id, p.position_id
+having sum(p.closed) > 0;
+
+-- One row per account per London day with any deal or closed trade on it.
+--
+-- Money comes from deals, on the day each was booked, so an entry
+-- commission lands on the day it was charged. The trade record comes from
+-- positions, counted once on the day each last closed, with its whole net:
+-- entry commission and swap included, and a position closed in two halves
+-- still one trade.
+create or replace view public.account_daily
+with (security_invoker = true) as
+with money as (
+  select
+    d.account_id,
+    (d.time at time zone 'Europe/London')::date                         as day,
+    coalesce(sum(d.net) filter (where d.kind in ('trade', 'other')), 0) as trade_pnl,
+    coalesce(sum(d.net) filter (where d.kind = 'cash'), 0)              as cash_flow,
+    coalesce(sum(d.net) filter (where d.kind = 'cash' and d.net > 0), 0) as deposits,
+    coalesce(sum(d.net) filter (where d.kind = 'cash' and d.net < 0), 0) as withdrawals
+  from public.deals d
+  group by d.account_id, (d.time at time zone 'Europe/London')::date
+),
+record as (
+  select
+    p.account_id,
+    (p.close_time at time zone 'Europe/London')::date                  as day,
+    count(*)                                                            as closed,
+    count(*) filter (where p.net > 0)                                   as wins,
+    count(*) filter (where p.net < 0)                                   as losses,
+    coalesce(sum(p.net) filter (where p.net > 0), 0)                    as gross_profit,
+    coalesce(sum(p.net) filter (where p.net < 0), 0)                    as gross_loss,
+    coalesce(sum(p.volume_out), 0)                                      as lots
+  from public.account_positions p
+  group by p.account_id, (p.close_time at time zone 'Europe/London')::date
+)
+select
+  coalesce(m.account_id, r.account_id)  as account_id,
+  coalesce(m.day, r.day)                as day,
+  coalesce(m.trade_pnl, 0)              as trade_pnl,
+  coalesce(m.cash_flow, 0)              as cash_flow,
+  coalesce(r.closed, 0)                 as closed,
+  coalesce(r.wins, 0)                   as wins,
+  coalesce(r.losses, 0)                 as losses,
+  coalesce(r.gross_profit, 0)           as gross_profit,
+  coalesce(r.gross_loss, 0)             as gross_loss,
+  coalesce(r.lots, 0)                   as lots,
+  coalesce(m.deposits, 0)               as deposits,
+  coalesce(m.withdrawals, 0)            as withdrawals
+from money m
+full outer join record r on r.account_id = m.account_id and r.day = m.day;
 
 -- ---------------------------------------------------------------------------
 -- 7. The browser never needs the anon role for any of this.

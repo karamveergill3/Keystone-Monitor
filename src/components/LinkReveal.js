@@ -6,6 +6,7 @@ export default function LinkReveal({ state, what }) {
   return (
     <div className="mt-3 space-y-2 rounded-lg border border-accent/40 bg-accent/5 p-3 text-sm">
       <p>{what} for {state.email}. Send it to them directly; it works once and expires (an hour by default in Supabase).</p>
+      {state.note && <p className="text-xs text-warn">{state.note}</p>}
       <CopyField value={state.link} />
     </div>
   );

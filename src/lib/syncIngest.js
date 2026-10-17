@@ -101,14 +101,28 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
         .reduce((s, d) => s + Number(d.net), 0)
     : 0;
 
-  const dd = nextDrawdown(
-    {
-      peak: account.peak_equity,
-      maxDrawdownPct: account.max_drawdown_pct,
-      maxDrawdownAt: account.max_drawdown_at,
-    },
-    { equity: a.equity, credit: a.credit, cashFlow, at: nowIso }
-  );
+  // A BACKLOG PAGE IS NOT SCORED. While the EA says more pages follow,
+  // the equity it sends is today's but the deals are older, so comparing
+  // the two would mix moments: a deposit made during an outage would raise
+  // the peak on the page holding today's equity and again on the page
+  // holding the deposit, and read as a drawdown. The peak only follows the
+  // money until the last page, which is scored against current equity.
+  const dd = payload.more
+    ? {
+        peak: account.peak_equity === null || account.peak_equity === undefined
+          ? null
+          : Number(account.peak_equity) + cashFlow,
+        maxDrawdownPct: Number(account.max_drawdown_pct ?? 0),
+        maxDrawdownAt: account.max_drawdown_at ?? null,
+      }
+    : nextDrawdown(
+        {
+          peak: account.peak_equity,
+          maxDrawdownPct: account.max_drawdown_pct,
+          maxDrawdownAt: account.max_drawdown_at,
+        },
+        { equity: a.equity, credit: a.credit, cashFlow, at: nowIso }
+      );
 
   const sampleDue =
     !account.last_sample_at || now - Date.parse(account.last_sample_at) >= SAMPLE_EVERY_MS;
@@ -151,7 +165,11 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
   return reply(200, {
     ok: true,
     stored: inserted.length,
-    resync: account.resync_requested === true,
+    // The binding sync always asks for the whole history. The EA keeps its
+    // watermark per login, so a terminal that already synced this login
+    // somewhere else (another row, another deployment) would otherwise only
+    // send what happened after that.
+    resync: account.resync_requested === true || !account.account_number,
     interval: syncIntervalSec(env),
   });
 }

@@ -43,4 +43,4 @@ if (error) {
 
 const origin = process.env.APP_URL.replace(/\/+$/, "");
 console.log(`${email} is an admin. Open this link to choose a password (it works once):\n`);
-console.log(`${origin}/auth/confirm?token_hash=${encodeURIComponent(res.data.properties.hashed_token)}&type=${type}\n`);
+console.log(`${origin}/confirm?token_hash=${encodeURIComponent(res.data.properties.hashed_token)}&type=${type}\n`);
