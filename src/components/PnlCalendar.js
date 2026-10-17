@@ -30,7 +30,7 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
       {/* Scrolls sideways on a phone, like the tables, rather than squeezing
           the figures. */}
       <div className="overflow-x-auto">
-      <div className="grid min-w-[36rem] grid-cols-7 gap-1.5 text-xs">
+      <div className="grid min-w-[44rem] grid-cols-7 gap-1.5 text-xs">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
           <div key={d} className="px-1.5 pb-1 font-medium text-muted">{d}</div>
         ))}
@@ -39,11 +39,11 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
           const inMonth = d >= first && d <= last;
           const tone = !r || r.tradePnl === 0 ? "border border-line/70" : r.tradePnl > 0 ? "border border-up/30 bg-up-soft" : "border border-down/30 bg-down-soft";
           return (
-            <div key={d} className={`min-h-[4.5rem] rounded-md p-2 ${tone} ${inMonth ? "" : "opacity-35"}`}>
+            <div key={d} className={`min-h-[4.5rem] min-w-0 rounded-md p-2 [overflow-wrap:anywhere] ${tone} ${inMonth ? "" : "opacity-35"}`}>
               <p className="text-muted">{Number(d.slice(8))}</p>
               {r && r.tradePnl !== 0 && (
                 <>
-                  <p className={`num mt-0.5 text-sm font-semibold ${r.tradePnl > 0 ? "text-up" : "text-down"}`}>{money(r.tradePnl, currency, { sign: true, decimals: 0 })}</p>
+                  <p className={`num mt-0.5 text-xs font-semibold sm:text-sm ${r.tradePnl > 0 ? "text-up" : "text-down"}`}>{money(r.tradePnl, currency, { sign: true, decimals: 0 })}</p>
                   <p className="num text-xs text-muted">{pct(r.ret, { sign: true })}</p>
                 </>
               )}

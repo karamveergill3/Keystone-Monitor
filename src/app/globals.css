@@ -85,8 +85,12 @@ body {
   box-shadow: 0 0 10px rgb(46 242 208 / 0.45);
 }
 
-input[type="date"]::-webkit-calendar-picker-indicator {
-  filter: invert(0.85);
+/* The header sticks from the sm breakpoint up: keep anything scrolled or
+   tabbed to clear of it. */
+@media (min-width: 40rem) {
+  html {
+    scroll-padding-top: 5rem;
+  }
 }
 
 /* HUD corner brackets: cyan top left, magenta bottom right, as on the
