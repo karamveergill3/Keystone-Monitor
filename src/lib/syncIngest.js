@@ -5,7 +5,8 @@
 // ORDER MATTERS. Deals, the equity sample and the open positions are
 // stored before the account row is touched, and any failure is a 500. The
 // EA only moves its own watermark on a 200, so a failed sync is simply sent
-// again next time, and nothing is ever half recorded.
+// again next time. Each write is safe to repeat, and the open positions are
+// replaced in one transaction, so nothing is ever half recorded.
 
 import { bearerKey, hashSyncKey } from "./syncKeys.js";
 import { parseSyncPayload, SyncPayloadError, MAX_BODY_BYTES } from "./syncPayload.js";
@@ -137,17 +138,19 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
   }
 
   // Open positions are a snapshot, replaced whole: whatever is not in this
-  // sync has been closed. An EA too old to report them sends no list (null),
-  // and the rows are left as they are rather than wiped.
+  // sync has been closed. One database call does the delete and the insert
+  // in a single transaction (replace_open_positions in schema.sql), so a
+  // failure keeps the previous snapshot rather than leaving none. Every row
+  // is stamped with this sync's time, the same as last_sync_at below. An EA
+  // too old to report positions sends no list (null), and the rows are left
+  // as they are rather than wiped.
   if (Array.isArray(payload.open)) {
-    const { error: clearErr } = await db.from("open_positions").delete().eq("account_id", account.id);
-    if (clearErr) throw new Error(`open positions clear failed: ${clearErr.message}`);
-    if (payload.open.length) {
-      const { error } = await db
-        .from("open_positions")
-        .insert(payload.open.map((p) => ({ account_id: account.id, ...p, updated_at: nowIso })));
-      if (error) throw new Error(`open positions insert failed: ${error.message}`);
-    }
+    const { error } = await db.rpc("replace_open_positions", {
+      p_account: account.id,
+      p_rows: payload.open,
+      p_at: nowIso,
+    });
+    if (error) throw new Error(`open positions replace failed: ${error.message}`);
   }
 
   const update = {

@@ -160,10 +160,12 @@ drop policy if exists "members read equity samples" on public.equity_samples;
 -- 5. Open positions: what each terminal has open right now.
 --
 -- A snapshot, not history: every sync from an EA that reports positions
--- deletes the account's rows and inserts what it sent, so a position
--- closed on the terminal disappears here at the next sync. A sync from an
--- older EA that does not report them leaves the rows alone. Closed trades
--- come from deals (account_positions below), never from this table.
+-- replaces the account's rows with what it sent, so a position closed on
+-- the terminal disappears here at the next sync. A sync from an older EA
+-- that does not report them leaves the rows alone; their updated_at is then
+-- older than the account's last_sync_at, which is how the page knows not to
+-- show them as current. Closed trades come from deals (account_positions
+-- below), never from this table.
 -- ---------------------------------------------------------------------------
 create table if not exists public.open_positions (
   account_id    uuid not null references public.accounts (id) on delete cascade,
@@ -187,6 +189,34 @@ create table if not exists public.open_positions (
 alter table public.open_positions enable row level security;
 
 -- No policies (see projects above).
+
+-- The replace, in one transaction: /api/sync calls this rather than a
+-- delete and an insert of its own, which are two requests, so a failure
+-- between them could leave an account with no rows while it still has
+-- positions open. Here a failed insert undoes the delete, and the account
+-- keeps its previous snapshot until the EA's retry.
+--
+-- p_rows is a JSON list of what src/lib/syncPayload.js returns for each
+-- position. Service role only (see section 7). If the arguments ever
+-- change, drop this signature first: "create or replace" would add a
+-- second function beside it rather than replace it.
+create or replace function public.replace_open_positions(p_account uuid, p_rows jsonb, p_at timestamptz)
+returns void
+language sql
+set search_path = ''
+as $$
+  delete from public.open_positions where account_id = p_account;
+  insert into public.open_positions
+    (account_id, ticket, symbol, side, volume, open_price, current_price, sl, tp, swap, profit,
+     open_time, magic, comment, updated_at)
+  select p_account, r.ticket, r.symbol, r.side, r.volume, r.open_price, r.current_price, r.sl, r.tp,
+         r.swap, r.profit, r.open_time, r.magic, r.comment, coalesce(p_at, now())
+    from jsonb_to_recordset(coalesce(p_rows, '[]'::jsonb)) as r (
+      ticket text, symbol text, side text, volume numeric, open_price numeric, current_price numeric,
+      sl numeric, tp numeric, swap numeric, profit numeric, open_time timestamptz, magic bigint,
+      comment text
+    );
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 6. Views. security_invoker, so the RLS above applies to whoever reads them.
@@ -310,6 +340,13 @@ revoke all on public.projects, public.accounts, public.account_keys,
   public.deals, public.equity_samples, public.open_positions,
   public.account_daily, public.account_positions
   from anon, authenticated;
+
+-- Postgres lets everyone run a new function, and Supabase grants the
+-- browser roles every function in public by default. This one writes, so
+-- only the server may call it.
+revoke all on function public.replace_open_positions(uuid, jsonb, timestamptz)
+  from public, anon, authenticated;
+grant execute on function public.replace_open_positions(uuid, jsonb, timestamptz) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 8. Left over from when partners signed in: who could sign in, never any

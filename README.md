@@ -26,9 +26,12 @@ Anyone with the link       --->                                       account_po
   deals every two minutes, and straight away when a deal lands. It runs
   beside any trading EA.
 - **Open positions are a snapshot.** Each sync replaces the account's
-  `open_positions` rows with what the terminal has open, so the account page
-  shows them as of the last sync. An EA older than 2026.10.17.2 does not
-  send them; its syncs leave the table alone and the page says to update it.
+  `open_positions` rows with what the terminal has open, in one transaction
+  (`replace_open_positions` in `schema.sql`), so the account page shows them
+  as of the last sync and a failed sync keeps the previous list. An EA older
+  than 2026.10.17.2 does not send them; its syncs leave the table alone, and
+  the page, seeing rows older than the last sync, hides them and says to
+  update the EA.
 - **One key per account.** Made on the admin screen, shown once, stored only
   as a SHA-256. The first sync binds the key to that login and server; the
   same key from a different login is refused.

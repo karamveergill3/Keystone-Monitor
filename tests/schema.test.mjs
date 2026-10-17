@@ -6,6 +6,8 @@ import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
+import { parseSyncPayload } from "@/lib/syncPayload";
+import { payload } from "./fixtures.mjs";
 
 const SCHEMA = readFileSync(new URL("../supabase/schema.sql", import.meta.url), "utf8");
 
@@ -25,6 +27,7 @@ const SUPABASE_STUB = `
   grant usage on schema public, auth to anon, authenticated, service_role;
   grant execute on all functions in schema auth to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
+  alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 `;
 
 let db;
@@ -71,11 +74,13 @@ async function as(userId, sql) {
   }
 }
 
-// Runs sql as the site's server does, with the service role.
-async function asServer(sql) {
+// Runs sql as the site's server does, with the service role. Either a
+// string or { sql, params }.
+async function asServer(q) {
+  const { sql, params } = typeof q === "string" ? { sql: q, params: undefined } : q;
   await db.exec("set role service_role");
   try {
-    return await db.query(sql);
+    return await db.query(sql, params);
   } finally {
     await db.exec("reset role");
   }
@@ -185,6 +190,60 @@ test("open positions are a per-account snapshot that goes with its account", asy
   assert.equal(left.rows[0].n, 0);
 });
 
+const SNAPSHOT = "50000000-0000-0000-0000-000000000005";
+const REPLACE = "select public.replace_open_positions($1, $2::jsonb, $3)";
+
+async function snapshotRows() {
+  const { rows } = await db.query(
+    `select ticket, symbol, side, volume::float8, open_price::float8, current_price::float8, sl::float8, tp::float8,
+            swap::float8, profit::float8, to_char(open_time at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as open_time,
+            magic::int, comment, to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as updated_at
+       from public.open_positions where account_id = $1 order by ticket`,
+    [SNAPSHOT]
+  );
+  return rows;
+}
+
+test("replace_open_positions swaps an account's snapshot for exactly what the sync parsed", async () => {
+  await db.exec(`
+    insert into public.accounts (id, project_id, label)
+      select '${SNAPSHOT}', id, 'Replace' from public.projects where slug = 'v100';
+  `);
+  const { open } = parseSyncPayload(payload(), Date.parse("2026-10-17T12:00:00Z"));
+  const at = "2026-10-17T12:00:00.000Z";
+  await asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify(open), at] });
+  // Every field the parser returns lands in its column, nothing dropped.
+  assert.deepEqual(await snapshotRows(), open.map((p) => ({ ...p, updated_at: at })));
+
+  // The next sync's list replaces it: 1004 closed, 1005 still open.
+  const later = "2026-10-17T12:02:00.000Z";
+  await asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify([open[1]]), later] });
+  assert.deepEqual((await snapshotRows()).map((r) => [r.ticket, r.updated_at]), [["1005", later]]);
+
+  // Everything closed.
+  await asServer({ sql: REPLACE, params: [SNAPSHOT, "[]", later] });
+  assert.deepEqual(await snapshotRows(), []);
+  // Other accounts' rows are never touched.
+  const other = await db.query("select count(*)::int as n from public.open_positions where account_id <> $1", [SNAPSHOT]);
+  assert.ok(other.rows[0].n > 0);
+});
+
+test("a replace that fails part way keeps the previous snapshot", async () => {
+  const { open } = parseSyncPayload(payload(), Date.parse("2026-10-17T12:00:00Z"));
+  const at = "2026-10-17T12:04:00.000Z";
+  await asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify(open), at] });
+  const before = await snapshotRows();
+  assert.equal(before.length, 2);
+  // The delete runs, then the insert hits a bad row: the delete is undone
+  // with it, so the account is never left with no positions.
+  const bad = [{ ...open[0], ticket: "1010" }, { ...open[1], ticket: "1011", side: "long" }];
+  await assert.rejects(
+    asServer({ sql: REPLACE, params: [SNAPSHOT, JSON.stringify(bad), "2026-10-17T12:06:00.000Z"] }),
+    /check constraint/
+  );
+  assert.deepEqual(await snapshotRows(), before);
+});
+
 test("the server reads and writes everything, sync keys included", async () => {
   await asServer(`
     insert into public.equity_samples (account_id, at, balance, equity)
@@ -218,7 +277,23 @@ test("a browser writes nothing", async () => {
       /permission denied/
     );
     await assert.rejects(as(userId, "delete from public.open_positions"), /permission denied/);
+    await assert.rejects(
+      as(userId, "select public.replace_open_positions('10000000-0000-0000-0000-000000000001', '[]'::jsonb, now())"),
+      /permission denied/
+    );
   }
+  const left = await db.query(
+    "select count(*)::int as n from public.open_positions where account_id = '10000000-0000-0000-0000-000000000001'"
+  );
+  assert.equal(left.rows[0].n, 1);
+  // Refused at the door, not only by the table behind it.
+  const fn = "public.replace_open_positions(uuid, jsonb, timestamptz)";
+  const { rows } = await db.query(
+    `select has_function_privilege('anon', '${fn}', 'execute') as anon,
+            has_function_privilege('authenticated', '${fn}', 'execute') as authenticated,
+            has_function_privilege('service_role', '${fn}', 'execute') as server`
+  );
+  assert.deepEqual(rows, [{ anon: false, authenticated: false, server: true }]);
 });
 
 test("every table has row-level security on", async () => {

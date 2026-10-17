@@ -1,5 +1,6 @@
 import Pnl from "@/components/Pnl";
 import { ago, londonTime, money, number } from "@/lib/format";
+import { openSnapshot } from "@/lib/openPositions";
 
 const EMPTY = "rounded-lg border border-line bg-panel p-6 text-sm text-muted";
 
@@ -15,26 +16,39 @@ function marginLevel(account) {
   return `${number(account.margin_level, 0)}%`;
 }
 
+function positions(n) {
+  return `${number(n, 0)} ${n === 1 ? "position" : "positions"}`;
+}
+
+// Why there is no list to show (see openSnapshot in src/lib/openPositions.js).
+function emptyText(state, reported, account) {
+  if (state === "unreported") {
+    const version = account.ea_version ? ` (${account.ea_version})` : "";
+    return `The terminal has ${positions(reported)} open, but its EA${version} is older and does not list positions. Install the latest EA from the admin screen to see them here.`;
+  }
+  if (state === "pending") {
+    return `The terminal counted ${positions(reported)} open at its last sync but sent an empty list. The next sync lists ${reported === 1 ? "it" : "them"}.`;
+  }
+  return "No open positions.";
+}
+
 // What the terminal had open at its last sync, newest first, under the
-// account's margin figures from the same sync.
+// account's margin figures from the same sync. Rows an earlier sync left
+// behind are never listed as current.
 export default function OpenPositionsTable({ rows, account, currency }) {
-  if (!account.last_sync_at) {
+  const { state, rows: list, reported } = openSnapshot(rows, account);
+  if (state === "waiting") {
     return <p className={EMPTY}>Open positions appear here once the EA is syncing.</p>;
   }
 
-  const reported = Number(account.open_positions ?? 0);
   return (
     <div className="space-y-2">
       <p className="text-xs text-muted">
         Margin {money(account.margin, currency)} · free margin {money(account.free_margin, currency)} · margin level{" "}
         {marginLevel(account)} · as of last sync {ago(account.last_sync_at)}
       </p>
-      {rows.length === 0 ? (
-        <p className={EMPTY}>
-          {reported > 0
-            ? `The terminal has ${number(reported, 0)} ${reported === 1 ? "position" : "positions"} open, but its EA is older and does not report them. Install the latest EA from the admin screen to see them here.`
-            : "No open positions."}
-        </p>
+      {state !== "current" ? (
+        <p className={EMPTY}>{emptyText(state, reported, account)}</p>
       ) : (
         <>
           <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
@@ -54,7 +68,7 @@ export default function OpenPositionsTable({ rows, account, currency }) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((p) => (
+                {list.map((p) => (
                   <tr
                     key={p.ticket}
                     className="border-b border-line/70 last:border-0"
@@ -78,9 +92,9 @@ export default function OpenPositionsTable({ rows, account, currency }) {
             </table>
           </div>
           <p className="text-xs text-muted">
-            {reported > rows.length
-              ? `Showing ${number(rows.length, 0)} of the ${number(reported, 0)} open on the terminal.`
-              : `${number(rows.length, 0)} open ${rows.length === 1 ? "position" : "positions"}.`}
+            {reported > list.length
+              ? `Showing ${number(list.length, 0)} of the ${number(reported, 0)} open on the terminal.`
+              : `${positions(list.length)} open.`}
           </p>
         </>
       )}
