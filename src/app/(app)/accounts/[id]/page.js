@@ -7,9 +7,10 @@ import TimeChart from "@/components/TimeChart";
 import PnlCalendar from "@/components/PnlCalendar";
 import PeriodTable from "@/components/PeriodTable";
 import PositionsTable from "@/components/PositionsTable";
+import OpenPositionsTable from "@/components/OpenPositionsTable";
 import ReportForm from "@/components/ReportForm";
 import { db } from "@/lib/db";
-import { getAccount, listProjects, dailyFor, positionsPage, equitySamples } from "@/lib/data";
+import { getAccount, listProjects, dailyFor, positionsPage, equitySamples, openPositions } from "@/lib/data";
 import { accountRow } from "@/lib/accountView";
 import { summarise, dailyReturns, groupPeriods } from "@/lib/accountStats";
 import { todayKey, monthStart, addMonths, londonMidnight } from "@/lib/days";
@@ -40,11 +41,12 @@ export default async function AccountPage({ params, searchParams }) {
   const month = /^\d{4}-\d{2}$/.test(query.month ?? "") && `${query.month}-01` <= today ? `${query.month}-01` : monthStart(today);
   const page = pageNumber(query.page);
 
-  const [projects, dailyMap, positions, samples] = await Promise.all([
+  const [projects, dailyMap, positions, samples, open] = await Promise.all([
     listProjects(supabase),
     dailyFor(supabase, [account.id]),
     positionsPage(supabase, account.id, { page, pageSize: PAGE_SIZE }),
     equitySamples(supabase, account.id, EQUITY_DAYS),
+    openPositions(supabase, account.id),
   ]);
   const project = projects.find((p) => p.id === account.project_id);
   const daily = dailyMap.get(account.id) ?? [];
@@ -122,6 +124,11 @@ export default async function AccountPage({ params, searchParams }) {
           <TimeChart points={equityPoints} currency={c} aLabel="Balance" bLabel="Equity" empty="Equity is sampled every 15 minutes once the EA is syncing." />
         </section>
       </div>
+
+      <section className="space-y-3">
+        <h2 className="text-base font-semibold">Open positions</h2>
+        <OpenPositionsTable rows={open} account={account} currency={c} />
+      </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

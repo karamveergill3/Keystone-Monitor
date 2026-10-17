@@ -2,7 +2,8 @@
 
 A site where business partners follow external MT5 accounts for the
 **V100** and **Cycle Method** projects: balance, equity, drawdown, P&L by
-day, week and month, every closed trade, and PDF reports for any date range.
+day, week and month, every closed trade, what is open right now, and PDF
+reports for any date range.
 Anyone with the link can see it; only the admin screen asks for a password.
 
 It is a standalone app with its own database and hosting. It shares no code,
@@ -13,15 +14,24 @@ data or credentials with any other system.
 ```
 MT5 terminal                       This site (Vercel)                 Supabase
 KeystoneSync.mq5  --- HTTPS --->   /api/sync  (per-account key)  -->  accounts, deals,
-(read-only EA)                                                        equity_samples
+(read-only EA)                                                        equity_samples,
+                                                                      open_positions
                                    Pages, PDFs  <-- server reads ---  account_daily view
 Anyone with the link       --->                                       account_positions view
 ```
 
 - **The EA only reads.** `public/ea/KeystoneSync.mq5` has no trading code at
   all, and `tests/ea.test.mjs` fails if any is ever added. It posts the
-  account's state and its deals every two minutes, and straight away when a
-  deal lands. It runs beside any trading EA.
+  account's state (balance, equity, margin), its open positions and its
+  deals every two minutes, and straight away when a deal lands. It runs
+  beside any trading EA.
+- **Open positions are a snapshot.** Each sync replaces the account's
+  `open_positions` rows with what the terminal has open, in one transaction
+  (`replace_open_positions` in `schema.sql`), so the account page shows them
+  as of the last sync and a failed sync keeps the previous list. An EA older
+  than 2026.10.17.2 does not send them; its syncs leave the table alone, and
+  the page, seeing rows older than the last sync, hides them and says to
+  update the EA.
 - **One key per account.** Made on the admin screen, shown once, stored only
   as a SHA-256. The first sync binds the key to that login and server; the
   same key from a different login is refused.
@@ -45,6 +55,7 @@ Anyone with the link       --->                                       account_po
 | Trading P&L | Profit + swap + commission + fees on every trade, plus broker charges and interest. Never deposits, withdrawals or credit. |
 | Gain | Time-weighted, like Myfxbook's Gain: each day's P&L over its opening balance, chained. Deposits and withdrawals do not move it. |
 | Floating drawdown | How far equity is below balance right now. |
+| Open positions, margin | As the terminal reported them at its last sync. Margin level is MT5's own figure, equity over margin. |
 | Max drawdown (account) | Largest fall in equity from its peak, sampled at every sync since the account was first connected. Deposits and withdrawals move the peak, so taking money out is not a drawdown. Broker credit is excluded. |
 | Max drawdown (reports) | Largest day-end fall of the gain index within the report's dates. |
 | Totals | Added up per currency. Accounts in different currencies are never summed together. |

@@ -10,6 +10,8 @@ function fakeDb() {
   const keys = new Map();
   const deals = new Map();
   const samples = [];
+  // Keyed account_id:ticket, the table's primary key.
+  const open = new Map();
 
   function from(table) {
     const q = { table, filters: [] };
@@ -64,7 +66,32 @@ function fakeDb() {
     return api;
   }
 
-  return { from, accounts, keys, deals, samples };
+  // replace_open_positions from schema.sql: all of an account's rows out
+  // and the new ones in, or, on any error, nothing changed at all.
+  async function rpc(name, args) {
+    if (name !== "replace_open_positions") throw new Error(`fake db: unhandled rpc ${name}`);
+    const { p_account: accountId, p_rows: rows, p_at: at } = args;
+    const ids = rows.map((r) => `${accountId}:${r.ticket}`);
+    if (new Set(ids).size !== ids.length) {
+      return { data: null, error: { message: "duplicate key value violates unique constraint" } };
+    }
+    for (const [id, r] of open) if (r.account_id === accountId) open.delete(id);
+    rows.forEach((r, i) => open.set(ids[i], { account_id: accountId, ...pick(r, OPEN_COLUMNS), updated_at: at }));
+    return { data: null, error: null };
+  }
+
+  return { from, rpc, accounts, keys, deals, samples, open };
+}
+
+// The columns replace_open_positions reads out of each row; anything else
+// in a row is dropped, as jsonb_to_recordset drops it.
+const OPEN_COLUMNS = [
+  "ticket", "symbol", "side", "volume", "open_price", "current_price", "sl", "tp",
+  "swap", "profit", "open_time", "magic", "comment",
+];
+
+function pick(obj, keys) {
+  return Object.fromEntries(keys.filter((k) => k in obj).map((k) => [k, obj[k]]));
 }
 
 function setup() {
@@ -188,6 +215,78 @@ test("a backlog sent in pages does not record a drawdown that never happened", a
   const acc = db.accounts.get("acc-1");
   assert.equal(acc.max_drawdown_pct, 0);
   assert.equal(acc.peak_equity, 20_000);
+});
+
+function openTickets(db, accountId = "acc-1") {
+  return [...db.open.values()].filter((r) => r.account_id === accountId).map((r) => r.ticket).sort();
+}
+
+test("open positions are stored as a snapshot that each sync replaces", async () => {
+  const { db, key } = setup();
+  // Another account's positions are never touched by this one's sync.
+  db.open.set("acc-2:9", { account_id: "acc-2", ticket: "9", symbol: "EURUSD" });
+
+  await sync(db, key, payload());
+  assert.deepEqual(openTickets(db), ["1004", "1005"]);
+  const stored = db.open.get("acc-1:1004");
+  assert.equal(stored.symbol, "XAUUSD");
+  assert.equal(stored.side, "buy");
+  assert.equal(stored.profit, -48);
+  assert.equal(stored.open_time, "2026-10-03T07:30:00.123Z");
+  assert.equal(stored.updated_at, new Date(T0).toISOString());
+
+  // 1004 closed and a new one opened: only what the terminal has now.
+  const [, eur] = payload().open;
+  const added = { ...eur, ticket: "1010", profit: 3.2 };
+  const res = await sync(db, key, payload({ open: [eur, added] }), T0 + 60_000);
+  assert.equal(res.status, 200);
+  assert.deepEqual(openTickets(db), ["1005", "1010"]);
+  assert.equal(db.open.get("acc-1:1010").profit, 3.2);
+  assert.equal(db.open.get("acc-1:1005").updated_at, new Date(T0 + 60_000).toISOString());
+
+  // Everything closed.
+  await sync(db, key, payload({ open: [] }), T0 + 120_000);
+  assert.deepEqual(openTickets(db), []);
+  assert.deepEqual(openTickets(db, "acc-2"), ["9"]);
+});
+
+test("a sync from an EA that does not report positions leaves them alone", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  const old = payload({ ea: "2026.10.17" });
+  delete old.open;
+  const res = await sync(db, key, old, T0 + 60_000);
+  assert.equal(res.status, 200);
+  assert.deepEqual(openTickets(db), ["1004", "1005"]);
+  assert.equal(db.open.get("acc-1:1004").updated_at, new Date(T0).toISOString());
+  assert.equal(db.accounts.get("acc-1").ea_version, "2026.10.17");
+});
+
+test("a failed open positions replace is a 500 the EA retries, and keeps the last snapshot", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload());
+  const before = { ...db.accounts.get("acc-1") };
+
+  // The replace is one call, so it either happens whole or not at all: the
+  // positions from the last good sync stay, and the account row (its
+  // position count and last_sync_at) still matches them.
+  db.rpc = async () => ({ data: null, error: { message: "statement timeout" } });
+  const [, eur] = payload().open;
+  await assert.rejects(
+    sync(db, key, payload({ open: [eur] }), T0 + 60_000),
+    /open positions replace failed: statement timeout/
+  );
+  assert.deepEqual(openTickets(db), ["1004", "1005"]);
+  assert.equal(db.open.get("acc-1:1004").updated_at, new Date(T0).toISOString());
+  assert.deepEqual(db.accounts.get("acc-1"), before);
+});
+
+test("every open position row carries the time of the sync that sent it", async () => {
+  const { db, key } = setup();
+  await sync(db, key, payload(), T0 + 5_000);
+  const at = db.accounts.get("acc-1").last_sync_at;
+  assert.equal(at, new Date(T0 + 5_000).toISOString());
+  for (const r of db.open.values()) assert.equal(r.updated_at, at);
 });
 
 test("a trailing NUL from MQL5 is tolerated", async () => {

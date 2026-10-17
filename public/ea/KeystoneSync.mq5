@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
 //|                                                 KeystoneSync.mq5 |
 //|                                                                  |
-//| READ-ONLY. Reports this account's balance, equity and deals to   |
-//| Keystone Monitor. It never opens, changes or closes a trade:     |
-//| there is no trading code in this file at all, and a test in the  |
-//| repository fails if any is ever added.                           |
+//| READ-ONLY. Reports this account's balance, equity, margin, open  |
+//| positions and deals to Keystone Monitor. It never opens, changes |
+//| or closes a trade: there is no trading code in this file at all, |
+//| and a test in the repository fails if any is ever added.         |
 //|                                                                  |
 //| Setup (once per terminal):                                       |
 //| 1. File -> Open Data Folder, then copy this file into            |
@@ -20,13 +20,14 @@
 //+------------------------------------------------------------------+
 #property copyright   "Keystone Monitor"
 #property version     "1.00"
-#property description "Read-only: reports balance, equity and deals to Keystone Monitor. Never trades."
+#property description "Read-only: reports balance, equity, open positions and deals to Keystone Monitor. Never trades."
 
-#define EA_VERSION          "2026.10.17"
+#define EA_VERSION          "2026.10.17.2"
 #define PAGE_SIZE           500
 #define MAX_PAGES_PER_TICK  20
 #define TICK_SECONDS        5
 #define HTTP_TIMEOUT_MS     10000
+#define MAX_OPEN            200
 
 input string SyncUrl    = "";    // SyncUrl from the admin screen
 input string SyncKey    = "";    // SyncKey from the admin screen (shown once)
@@ -236,6 +237,50 @@ string BuildAccount()
           + "}";
   }
 
+// The positions open right now, at most MAX_OPEN, as a JSON list. Sent in
+// full on every sync: the server replaces its copy with this one.
+// PositionGetTicket() only selects a position so its fields can be read;
+// nothing here changes it. Open times are broker server time, converted
+// to UTC with the same offset as the deals.
+string BuildOpen()
+  {
+   int total = PositionsTotal();
+   if(total > MAX_OPEN)
+      total = MAX_OPEN;
+
+   int utcOffset = ServerToUtcOffset();
+   int n = 0;
+   string json = "[";
+   for(int i = 0; i < total; i++)
+     {
+      ulong t = PositionGetTicket(i);
+      if(t == 0)
+         continue;
+      long msc = PositionGetInteger(POSITION_TIME_MSC);
+      string side = "sell";
+      if((ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE) == POSITION_TYPE_BUY)
+         side = "buy";
+      if(n > 0)
+         json += ",";
+      json += "{\"ticket\":\"" + StringFormat("%I64u", t) + "\""
+            + ",\"symbol\":\"" + JsonEscape(PositionGetString(POSITION_SYMBOL)) + "\""
+            + ",\"side\":\"" + side + "\""
+            + ",\"volume\":" + Num(PositionGetDouble(POSITION_VOLUME), 4)
+            + ",\"open_price\":" + Num(PositionGetDouble(POSITION_PRICE_OPEN), 6)
+            + ",\"current_price\":" + Num(PositionGetDouble(POSITION_PRICE_CURRENT), 6)
+            + ",\"sl\":" + Num(PositionGetDouble(POSITION_SL), 6)
+            + ",\"tp\":" + Num(PositionGetDouble(POSITION_TP), 6)
+            + ",\"swap\":" + Num(PositionGetDouble(POSITION_SWAP), 2)
+            + ",\"profit\":" + Num(PositionGetDouble(POSITION_PROFIT), 2)
+            + ",\"open_time\":\"" + MsToIso(msc - (long)utcOffset * 1000) + "\""
+            + ",\"magic\":" + IntegerToString(PositionGetInteger(POSITION_MAGIC))
+            + ",\"comment\":\"" + JsonEscape(PositionGetString(POSITION_COMMENT)) + "\"}";
+      n++;
+     }
+   json += "]";
+   return json;
+  }
+
 // Reads one integer field out of the server's small JSON reply.
 int ReplyInt(string reply, string field, int fallback)
   {
@@ -277,6 +322,7 @@ int SendPage(bool &more)
 
    string payload = "{\"v\":1,\"ea\":\"" + EA_VERSION + "\""
                     + ",\"account\":" + BuildAccount()
+                    + ",\"open\":" + BuildOpen()
                     + ",\"deals\":" + deals
                     + ",\"more\":" + (more ? "true" : "false")
                     + "}";
@@ -337,7 +383,8 @@ int SendPage(bool &more)
    if(interval >= 30 && interval <= 600)
       g_interval = interval;
 
-   g_status = "OK at " + TimeToString(TimeLocal(), TIME_MINUTES | TIME_SECONDS) + ", " + IntegerToString(count) + " deals sent";
+   g_status = "OK at " + TimeToString(TimeLocal(), TIME_MINUTES | TIME_SECONDS) + ", " + IntegerToString(count) + " deals sent, "
+              + IntegerToString(PositionsTotal()) + " positions open";
    return status;
   }
 

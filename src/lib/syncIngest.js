@@ -2,10 +2,11 @@
 //
 // Kept out of the route so the tests can drive it with a fake client.
 //
-// ORDER MATTERS. Deals are stored before the account row is touched, and
-// any failure is a 500. The EA only moves its own watermark on a 200, so a
-// failed sync is simply sent again next time, and nothing is ever half
-// recorded.
+// ORDER MATTERS. Deals, the equity sample and the open positions are
+// stored before the account row is touched, and any failure is a 500. The
+// EA only moves its own watermark on a 200, so a failed sync is simply sent
+// again next time. Each write is safe to repeat, and the open positions are
+// replaced in one transaction, so nothing is ever half recorded.
 
 import { bearerKey, hashSyncKey } from "./syncKeys.js";
 import { parseSyncPayload, SyncPayloadError, MAX_BODY_BYTES } from "./syncPayload.js";
@@ -134,6 +135,22 @@ export async function ingestSync(db, { authorization, rawBody, now = Date.now(),
         { onConflict: "account_id,at", ignoreDuplicates: true }
       );
     if (error) throw new Error(`equity sample failed: ${error.message}`);
+  }
+
+  // Open positions are a snapshot, replaced whole: whatever is not in this
+  // sync has been closed. One database call does the delete and the insert
+  // in a single transaction (replace_open_positions in schema.sql), so a
+  // failure keeps the previous snapshot rather than leaving none. Every row
+  // is stamped with this sync's time, the same as last_sync_at below. An EA
+  // too old to report positions sends no list (null), and the rows are left
+  // as they are rather than wiped.
+  if (Array.isArray(payload.open)) {
+    const { error } = await db.rpc("replace_open_positions", {
+      p_account: account.id,
+      p_rows: payload.open,
+      p_at: nowIso,
+    });
+    if (error) throw new Error(`open positions replace failed: ${error.message}`);
   }
 
   const update = {

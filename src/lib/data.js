@@ -69,6 +69,19 @@ export async function positionsPage(supabase, accountId, { page = 1, pageSize = 
   return { rows: data ?? [], total: count ?? 0 };
 }
 
+// What the terminal had open at its last sync, newest first. At most a few
+// hundred rows (the sync refuses more), so one read is all of them.
+export async function openPositions(supabase, accountId) {
+  const { data, error } = await supabase
+    .from("open_positions")
+    .select("ticket, symbol, side, volume, open_price, current_price, sl, tp, swap, profit, open_time, magic, comment, updated_at")
+    .eq("account_id", accountId)
+    .order("open_time", { ascending: false })
+    .order("ticket", { ascending: false });
+  if (error) throw new Error(`open positions read failed: ${error.message}`);
+  return data ?? [];
+}
+
 // The last `days` days of 15-minute samples.
 export async function equitySamples(supabase, accountId, days) {
   const sinceIso = new Date(Date.now() - days * 86_400_000).toISOString();

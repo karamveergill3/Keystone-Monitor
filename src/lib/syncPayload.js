@@ -9,6 +9,9 @@
 import { normaliseType, normaliseEntry, kindOf } from "./dealKinds.js";
 
 export const MAX_DEALS_PER_SYNC = 1000;
+// The EA sends at most 200 open positions; this leaves room for a later
+// EA to send more without being refused.
+export const MAX_OPEN_PER_SYNC = 500;
 export const MAX_BODY_BYTES = 2_000_000;
 
 // Deals are not accepted from before this, or from more than a day ahead
@@ -90,6 +93,45 @@ function parseDeal(d, i, now) {
   };
 }
 
+// One position the terminal has open right now. Checked as strictly as a
+// deal: a snapshot with a bad entry in it is refused whole.
+function parseOpenPosition(p, i, now) {
+  const at = `open[${i}]`;
+  if (!p || typeof p !== "object" || Array.isArray(p)) fail(`${at} is not an object`);
+  return {
+    ticket: digits(p.ticket, `${at}.ticket`),
+    symbol: str(p.symbol, 40),
+    side: p.side === "buy" || p.side === "sell" ? p.side : null,
+    volume: num(p.volume, `${at}.volume`),
+    open_price: num(p.open_price, `${at}.open_price`),
+    current_price: num(p.current_price, `${at}.current_price`),
+    sl: num(p.sl, `${at}.sl`),
+    tp: num(p.tp, `${at}.tp`),
+    swap: num(p.swap, `${at}.swap`),
+    profit: num(p.profit, `${at}.profit`),
+    open_time: time(p.open_time, `${at}.open_time`, now),
+    magic: int(p.magic, `${at}.magic`),
+    comment: str(p.comment, 80),
+  };
+}
+
+// null when the EA does not report open positions at all (one older than
+// 2026.10.17.2), which is not the same as reporting none: the server keeps
+// what it has rather than wiping it.
+function parseOpen(raw, now) {
+  if (raw === undefined || raw === null) return null;
+  if (!Array.isArray(raw)) fail("open is not a list");
+  if (raw.length > MAX_OPEN_PER_SYNC) fail(`more than ${MAX_OPEN_PER_SYNC} open positions in one sync`);
+  // A ticket twice would break the insert on its primary key; the later
+  // copy wins, as with deals.
+  const byTicket = new Map();
+  raw.forEach((p, i) => {
+    const pos = parseOpenPosition(p, i, now);
+    byTicket.set(pos.ticket, pos);
+  });
+  return [...byTicket.values()];
+}
+
 export function parseSyncPayload(body, now = Date.now()) {
   if (!body || typeof body !== "object" || Array.isArray(body)) fail("body is not a JSON object");
   if (body.v !== 1) fail("unsupported payload version");
@@ -126,10 +168,13 @@ export function parseSyncPayload(body, now = Date.now()) {
     byTicket.set(deal.ticket, deal);
   });
 
+  const open = parseOpen(body.open, now);
+
   return {
     eaVersion: str(body.ea, 20),
     account,
     deals: [...byTicket.values()],
+    open,
     more: body.more === true,
   };
 }
