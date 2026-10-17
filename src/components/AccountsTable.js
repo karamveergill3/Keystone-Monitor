@@ -10,7 +10,7 @@ export default function AccountsTable({ rows }) {
   return (
     <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
       <table className="w-full min-w-[880px] text-sm">
-        <thead className="bg-panel-2/70 text-left text-xs text-muted">
+        <thead className="bg-panel-2/70 text-left text-xs tracking-wider text-muted uppercase">
           <tr className="border-b border-line">
             <th className="px-4 py-2.5 font-medium">Account</th>
             <th className="px-4 py-2.5 text-right font-medium">Balance</th>
@@ -26,7 +26,7 @@ export default function AccountsTable({ rows }) {
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id} className="border-b border-line/70 last:border-0 hover:bg-bg">
+            <tr key={r.id} className="border-b border-line/70 last:border-0 hover:bg-panel-2/60">
               <td className="px-4 py-2.5">
                 <Link href={`/accounts/${r.id}`} className="font-medium text-ink hover:text-accent">
                   {r.label}

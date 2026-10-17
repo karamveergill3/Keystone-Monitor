@@ -28,7 +28,7 @@ export default function TimeChart({ points, currency = "USD", aLabel, bLabel, em
       <div className="h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="var(--color-line)" strokeOpacity={0.7} vertical={false} />
+          <CartesianGrid stroke="var(--color-line)" strokeOpacity={0.8} vertical={false} />
           <XAxis
             dataKey="t"
             type="number"
@@ -51,13 +51,19 @@ export default function TimeChart({ points, currency = "USD", aLabel, bLabel, em
             domain={["auto", "auto"]}
           />
           <Tooltip
-            contentStyle={{ background: "var(--color-panel)", border: "1px solid var(--color-line)", borderRadius: 6, fontSize: 13, color: "var(--color-ink)" }}
+            contentStyle={{ background: "var(--color-panel-2)", border: "1px solid var(--color-line-strong)", borderRadius: 6, fontSize: 13, color: "var(--color-ink)", fontFamily: "var(--font-mono)" }}
             labelStyle={{ color: "var(--color-muted)", marginBottom: 2 }}
             itemStyle={{ color: "var(--color-ink)" }}
             cursor={{ stroke: "var(--color-line)" }}
             labelFormatter={(t) => full.format(t)}
             formatter={(v, name) => [amount(v), name === "a" ? aLabel : bLabel]}
           />
+          {/* A wide, faint copy under each line is its neon glow. Not in the
+              legend or the tooltip. */}
+          <Line type="monotone" dataKey="a" stroke="var(--color-series-1)" strokeOpacity={0.18} strokeWidth={7} dot={false} activeDot={false} legendType="none" tooltipType="none" isAnimationActive={false} />
+          {bLabel && (
+            <Line type="monotone" dataKey="b" stroke="var(--color-series-2)" strokeOpacity={0.18} strokeWidth={7} dot={false} activeDot={false} legendType="none" tooltipType="none" isAnimationActive={false} />
+          )}
           <Line type="monotone" dataKey="a" name="a" stroke="var(--color-series-1)" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--color-panel)" }} strokeWidth={2} isAnimationActive={false} />
           {bLabel && (
             <Line type="monotone" dataKey="b" name="b" stroke="var(--color-series-2)" dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--color-panel)" }} strokeWidth={2} isAnimationActive={false} />

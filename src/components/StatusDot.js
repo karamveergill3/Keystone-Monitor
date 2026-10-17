@@ -1,7 +1,7 @@
 const STYLES = {
-  online: ["bg-up", "Syncing"],
-  offline: ["bg-down", "Offline"],
-  waiting: ["bg-warn", "Waiting for first sync"],
+  online: ["bg-up shadow-[0_0_8px_var(--color-up)]", "Syncing"],
+  offline: ["bg-down shadow-[0_0_8px_var(--color-down)]", "Offline"],
+  waiting: ["bg-warn shadow-[0_0_8px_var(--color-warn)]", "Waiting for first sync"],
 };
 
 export default function StatusDot({ status, title }) {

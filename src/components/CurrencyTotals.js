@@ -6,8 +6,8 @@ export default function CurrencyTotals({ totals, tint = "bg-panel" }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {totals.map((t) => (
-        <div key={t.currency} className={`rounded-lg border border-line p-4 ${tint}`}>
-          <p className="text-xs text-muted">
+        <div key={t.currency} className={`hud rounded-md border border-line p-4 ${tint}`}>
+          <p className="text-xs tracking-wider text-muted uppercase">
             {t.accounts} {t.accounts === 1 ? "account" : "accounts"} in {t.currency}
           </p>
           <p className="num mt-1 text-2xl font-semibold">{money(t.balance, t.currency, { decimals: 0 })}</p>

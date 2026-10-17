@@ -14,18 +14,18 @@ export default async function AppLayout({ children }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-panel">
+      <header className="relative z-20 bg-bg/80 backdrop-blur sm:sticky sm:top-0">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-8 gap-y-2 px-4 py-3.5">
           <Link href="/" className="flex items-center gap-2.5 text-base font-semibold">
-            <LogoMark className="h-8 w-8" />
-            {APP_NAME}
+            <LogoMark className="h-8 w-8 rounded-lg ring-1 ring-line" />
+            <span className="tracking-tight">{APP_NAME}</span>
           </Link>
-          <nav className="flex flex-wrap gap-1 text-sm text-muted">
-            <Link href="/" className="rounded-md px-2.5 py-1 hover:bg-panel-2 hover:text-ink">Overview</Link>
+          <nav className="flex flex-wrap gap-1 text-xs font-medium tracking-[0.12em] text-muted uppercase">
+            <Link href="/" className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">Overview</Link>
             {projects.map((p) => (
-              <Link key={p.id} href={`/projects/${p.slug}`} className="rounded-md px-2.5 py-1 hover:bg-panel-2 hover:text-ink">{p.name}</Link>
+              <Link key={p.id} href={`/projects/${p.slug}`} className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">{p.name}</Link>
             ))}
-            {admin && <Link href="/admin" className="rounded-md px-2.5 py-1 hover:bg-panel-2 hover:text-ink">Admin</Link>}
+            {admin && <Link href="/admin" className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">Admin</Link>}
           </nav>
           {admin && (
             <form action={adminSignOut} className="ml-auto text-xs text-muted">
@@ -33,6 +33,7 @@ export default async function AppLayout({ children }) {
             </form>
           )}
         </div>
+        <div className="neon-rule" />
       </header>
       <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
     </div>

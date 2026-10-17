@@ -3,41 +3,40 @@
 /* Every colour in the app is one of these. New colours go here, not as
    one-off hex values in a component.
 
-   Warm paper and near-black ink, with pastel fills for state. Pastels are
-   for backgrounds only: every text colour here is at least 4.9:1 against
-   the bg, panel and panel-2 surfaces, and against its own soft fill. */
+   Dark and neon, after the logo: near-black panels, cyan and magenta for
+   identity, neon green and pink for profit and loss. Every text colour is
+   at least 5.4:1 against bg, panel, panel-2 and every soft fill. */
 @theme {
-  --color-bg: #f7f3ec;
-  --color-panel: #ffffff;
-  --color-panel-2: #f2ede4;
-  --color-line: #e5ddd0;
-  /* Form field borders: at least 3:1 against panel and bg, so a field
-     reads as a field. */
-  --color-line-strong: #958b7c;
-  --color-ink: #26221d;
-  --color-muted: #665f55;
-  --color-accent: #3b55a0;
-  --color-accent-soft: #e2e8f8;
-  --color-up: #24724e;
-  --color-up-soft: #e2f1e7;
-  --color-down: #ae3b45;
-  --color-down-soft: #f9e4e4;
-  --color-warn: #8a5a0e;
-  --color-warn-soft: #fbefd3;
+  --color-bg: #06070b;
+  --color-panel: #0d0f16;
+  --color-panel-2: #141826;
+  --color-line: #232a3d;
+  /* Form field borders: at least 3:1 against panel and bg. */
+  --color-line-strong: #5f6d8e;
+  --color-ink: #e8eefc;
+  --color-muted: #8f9bb5;
+  --color-accent: #2ef2d0;
+  --color-accent-soft: #0b2a2a;
+  --color-magenta: #ff5ad9;
+  --color-up: #3df29a;
+  --color-up-soft: #0e2a20;
+  --color-down: #ff6b8b;
+  --color-down-soft: #2c1220;
+  --color-warn: #ffc65c;
+  --color-warn-soft: #2b2210;
 
   /* Project identity tints, in project sort order. Backgrounds only. */
-  --color-tint-1: #e8edf9;
-  --color-tint-2: #fbeadd;
-  --color-tint-3: #e5f1ea;
-  --color-tint-4: #f1e7f4;
+  --color-tint-1: #0b2226;
+  --color-tint-2: #261029;
+  --color-tint-3: #0e2a20;
+  --color-tint-4: #1a1530;
 
-  /* Chart series: periwinkle and apricot, checked for colour-blind
-     separation. Lines only, never text. */
-  --color-series-1: #5b74c4;
-  --color-series-2: #c46a30;
+  /* Chart series: the logo's cyan and magenta. Lines only, never text. */
+  --color-series-1: #2ef2d0;
+  --color-series-2: #ff5ad9;
 
-  --font-sans: var(--font-plex), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: var(--font-grotesk), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* One step larger than Tailwind's defaults: the pages are dense with
      figures, and the small sizes carry labels people need to read. */
@@ -52,17 +51,59 @@
 }
 
 html {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
+/* A faint measuring grid with two soft glows behind it, the logo's cyan
+   and magenta. Fixed, so it does not scroll with the page. */
 body {
-  background: var(--color-bg);
+  background-color: var(--color-bg);
+  background-image:
+    radial-gradient(1100px 480px at 12% -12%, rgb(46 242 208 / 0.09), transparent 62%),
+    radial-gradient(900px 460px at 96% -8%, rgb(255 90 217 / 0.09), transparent 60%),
+    linear-gradient(rgb(143 155 181 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(143 155 181 / 0.045) 1px, transparent 1px);
+  background-size: auto, auto, 32px 32px, 32px 32px;
+  background-attachment: fixed;
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
+/* Figures read like an instrument: monospaced, every digit the same width. */
 .num {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
+  letter-spacing: -0.01em;
+}
+
+/* The cyan-to-magenta line under the header, as on the logo's edge. */
+.neon-rule {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-accent) 20%, var(--color-magenta) 80%, transparent);
+  box-shadow: 0 0 10px rgb(46 242 208 / 0.45);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.85);
+}
+
+/* HUD corner brackets: cyan top left, magenta bottom right, as on the
+   logo. Decoration only; the card keeps its own background and border. */
+.hud {
+  position: relative;
+}
+.hud::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(var(--color-accent), var(--color-accent)) top left / 16px 1.5px no-repeat,
+    linear-gradient(var(--color-accent), var(--color-accent)) top left / 1.5px 16px no-repeat,
+    linear-gradient(var(--color-magenta), var(--color-magenta)) bottom right / 16px 1.5px no-repeat,
+    linear-gradient(var(--color-magenta), var(--color-magenta)) bottom right / 1.5px 16px no-repeat;
+  opacity: 0.85;
 }

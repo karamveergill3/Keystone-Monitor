@@ -115,12 +115,12 @@ export default async function AccountPage({ params, searchParams }) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-lg border border-line bg-panel p-4">
-          <h2 className="mb-2 text-sm font-medium">Balance, every day with a deal</h2>
+        <section className="hud rounded-md border border-line bg-panel p-4">
+          <h2 className="mb-3 text-xs font-medium tracking-wider text-muted uppercase">Balance, every day with a deal</h2>
           <TimeChart points={balancePoints} currency={c} aLabel="Balance" empty="No deals synced yet." />
         </section>
-        <section className="rounded-lg border border-line bg-panel p-4">
-          <h2 className="mb-2 text-sm font-medium">Balance and equity, last {EQUITY_DAYS} days</h2>
+        <section className="hud rounded-md border border-line bg-panel p-4">
+          <h2 className="mb-3 text-xs font-medium tracking-wider text-muted uppercase">Balance and equity, last {EQUITY_DAYS} days</h2>
           <TimeChart points={equityPoints} currency={c} aLabel="Balance" bLabel="Equity" empty="Equity is sampled every 15 minutes once the EA is syncing." />
         </section>
       </div>
@@ -138,7 +138,7 @@ export default async function AccountPage({ params, searchParams }) {
               <Link
                 key={v}
                 href={hrefWith(path, query, { view: v === "calendar" ? null : v, page: null })}
-                className={`rounded-md px-3 py-1 capitalize ${view === v ? "bg-panel font-medium text-ink shadow-sm" : "text-muted hover:text-ink"}`}
+                className={`rounded-md px-3 py-1 capitalize ${view === v ? "bg-accent-soft font-medium text-accent ring-1 ring-accent/40" : "text-muted hover:text-ink"}`}
               >
                 {v === "calendar" ? "Days" : v}
               </Link>

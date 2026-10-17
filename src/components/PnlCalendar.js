@@ -15,7 +15,7 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
   for (const r of returns) if (r.day >= first && r.day <= last) monthPnl += r.tradePnl;
 
   return (
-    <div className="rounded-lg border border-line bg-panel p-4 sm:p-5">
+    <div className="hud rounded-md border border-line bg-panel p-4 sm:p-5">
       <div className="mb-4 flex items-center justify-between text-sm">
         <Link href={prevHref} className="text-muted hover:text-ink">&larr; {monthLabel(addMonths(first, -1))}</Link>
         <p className="text-base font-semibold">
@@ -37,7 +37,7 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
         {cells.map((d) => {
           const r = byDay.get(d);
           const inMonth = d >= first && d <= last;
-          const tone = !r || r.tradePnl === 0 ? "border border-line/70" : r.tradePnl > 0 ? "bg-up-soft" : "bg-down-soft";
+          const tone = !r || r.tradePnl === 0 ? "border border-line/70" : r.tradePnl > 0 ? "border border-up/30 bg-up-soft" : "border border-down/30 bg-down-soft";
           return (
             <div key={d} className={`min-h-[4.5rem] rounded-md p-2 ${tone} ${inMonth ? "" : "opacity-35"}`}>
               <p className="text-muted">{Number(d.slice(8))}</p>

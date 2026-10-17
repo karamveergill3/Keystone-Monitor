@@ -44,7 +44,7 @@ export default async function AdminPage() {
         <EaCodeBox />
         <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
           <table className="w-full min-w-[960px] text-sm">
-            <thead className="bg-panel-2/70 text-left text-xs text-muted">
+            <thead className="bg-panel-2/70 text-left text-xs tracking-wider text-muted uppercase">
               <tr className="border-b border-line">
                 <th className="px-4 py-2.5 font-medium">Name and project</th>
                 <th className="px-4 py-2.5 font-medium">Login</th>

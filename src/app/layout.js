@@ -1,10 +1,11 @@
 import "./globals.css";
-import { IBM_Plex_Sans } from "next/font/google";
+import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import { APP_NAME } from "@/lib/site";
 
 // Self-hosted at build time, so the page loads no font from anywhere else
 // (the Content-Security-Policy allows fonts from this origin only).
-const plex = IBM_Plex_Sans({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-plex", display: "swap" });
+const grotesk = Space_Grotesk({ subsets: ["latin"], weight: ["400", "500", "600", "700"], variable: "--font-grotesk", display: "swap" });
+const mono = JetBrains_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata = {
   title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
@@ -13,12 +14,12 @@ export const metadata = {
 };
 
 export const viewport = {
-  themeColor: "#f7f3ec",
+  themeColor: "#06070b",
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={plex.variable}>
+    <html lang="en" className={`${grotesk.variable} ${mono.variable}`}>
       <body className="min-h-screen">{children}</body>
     </html>
   );

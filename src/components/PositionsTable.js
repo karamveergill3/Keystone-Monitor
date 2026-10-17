@@ -9,7 +9,7 @@ export default function PositionsTable({ rows, total, page, pageSize, currency, 
     <div className="space-y-2">
       <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
         <table className="w-full min-w-[820px] text-sm">
-          <thead className="bg-panel-2/70 text-xs text-muted">
+          <thead className="bg-panel-2/70 text-xs tracking-wider text-muted uppercase">
             <tr className="border-b border-line">
               <th className="px-4 py-2.5 text-left font-medium">Closed</th>
               <th className="px-4 py-2.5 text-left font-medium">Opened</th>

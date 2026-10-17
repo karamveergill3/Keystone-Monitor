@@ -4,7 +4,7 @@ import { inputClass, labelClass, buttonClass } from "@/lib/ui";
 // Both are London days and both are included. Either may be left blank.
 export default function ReportForm({ action, title = "PDF report" }) {
   return (
-    <form action={action} method="get" target="_blank" className="rounded-lg border border-line bg-panel p-4">
+    <form action={action} method="get" target="_blank" className="hud rounded-md border border-line bg-panel p-4">
       <p className="mb-3 text-sm font-medium">{title}</p>
       <div className="flex flex-wrap items-end gap-3">
         <div>

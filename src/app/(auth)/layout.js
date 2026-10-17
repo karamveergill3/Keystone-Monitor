@@ -8,7 +8,7 @@ export default function AuthLayout({ children }) {
         <LogoMark className="h-16 w-16" />
         <p className="text-sm font-semibold tracking-wide text-muted uppercase">{APP_NAME}</p>
       </div>
-      <div className="rounded-lg border border-line bg-panel p-6">{children}</div>
+      <div className="hud rounded-md border border-line bg-panel p-6">{children}</div>
     </main>
   );
 }

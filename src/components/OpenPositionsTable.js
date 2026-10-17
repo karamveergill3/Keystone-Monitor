@@ -53,7 +53,7 @@ export default function OpenPositionsTable({ rows, account, currency }) {
         <>
           <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
             <table className="w-full min-w-[920px] text-sm">
-              <thead className="bg-panel-2/70 text-xs text-muted">
+              <thead className="bg-panel-2/70 text-xs tracking-wider text-muted uppercase">
                 <tr className="border-b border-line">
                   <th className="px-4 py-2.5 text-left font-medium">Opened</th>
                   <th className="px-4 py-2.5 text-left font-medium">Symbol</th>
