@@ -69,7 +69,7 @@ export default async function AccountPage({ params, searchParams }) {
   const returns = dailyReturns(daily, row.balance);
   const baskets = accountBaskets({ rows: open, account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(account.id) ?? [] });
   const risk = accountRisk({ rows: open, account: row });
-  const attention = accountAttention({ row, baskets, risk });
+  const attention = accountAttention({ row, baskets });
 
   const path = `/accounts/${account.id}`;
   const balanceSeries = balancePoints(returns);
@@ -82,7 +82,7 @@ export default async function AccountPage({ params, searchParams }) {
         <div>
           <p className="text-xs text-muted">
             {project && <Link href={`/projects/${project.slug}`} className="hover:text-ink">{project.name}</Link>}
-            {account.archived_at && <span className="ml-2 text-warn">Archived</span>}
+            {account.archived_at && <span className="ml-2 text-muted">Archived</span>}
           </p>
           <h1 className="text-xl font-semibold">{account.label}</h1>
           <p className="text-sm text-muted">

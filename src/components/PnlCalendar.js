@@ -52,7 +52,7 @@ export default function PnlCalendar({ returns, month, currency, prevHref, nextHr
                 </>
               )}
               {r && r.cashFlow !== 0 && (
-                <p className="num mt-1 inline-block rounded bg-warn-soft px-1 text-xs text-warn" title="Deposit or withdrawal">{money(r.cashFlow, currency, { sign: true, decimals: 0 })}</p>
+                <p className="num mt-1 inline-block rounded bg-panel-2 px-1 text-xs text-muted" title="Deposit or withdrawal">{money(r.cashFlow, currency, { sign: true, decimals: 0 })}</p>
               )}
             </div>
           );

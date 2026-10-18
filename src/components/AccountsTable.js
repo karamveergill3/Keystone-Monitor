@@ -1,8 +1,7 @@
 import Link from "next/link";
 import Pnl from "@/components/Pnl";
 import StatusDot from "@/components/StatusDot";
-import { LEVELS, ReasonIcon, levelStyle } from "@/components/AttentionBanner";
-import { floatingDdLevel } from "@/lib/attention";
+import { CLOSABLE, ClosableIcon } from "@/components/AttentionBanner";
 import { money, pct, ago, number } from "@/lib/format";
 
 // The Baskets cell, from the row's accountBaskets result (src/lib/baskets.js)
@@ -38,10 +37,10 @@ function BasketsCell({ r }) {
       {k > 0 && (
         <Link
           href={`/accounts/${r.id}#baskets`}
-          className={`mt-0.5 flex items-center justify-center gap-1 text-xs font-medium whitespace-nowrap hover:underline ${LEVELS.green.text}`}
+          className={`mt-0.5 flex items-center justify-center gap-1 text-xs font-medium whitespace-nowrap hover:underline ${CLOSABLE.text}`}
           title={`Can be closed now and the week stays in profit, each on its own: ${detail}`}
         >
-          <ReasonIcon level="green" className="h-3.5 w-3.5" />
+          <ClosableIcon className="h-3.5 w-3.5" />
           {number(k, 0)} closable
         </Link>
       )}
@@ -49,35 +48,28 @@ function BasketsCell({ r }) {
   );
 }
 
-// Each reason the account needs looking at (its accountAttention result in
-// src/lib/attention.js), as small chips under its name: icon and short
-// form in the reason's colour, the full sentence on hover. They wrap inside
-// the account column, which is the one that already wraps, so the figures
-// keep their widths and the table still fits the page.
-function ReasonChips({ attention }) {
-  const reasons = attention?.reasons ?? [];
+// The account's closable baskets (its accountAttention result in
+// src/lib/attention.js), as a green chip under its name: the tick and short
+// form, the full sentence on hover. It wraps inside the account column,
+// which is the one that already wraps, so the figures keep their widths
+// and the table still fits the page. Nothing else is ever a chip.
+function ClosableChip({ attention }) {
+  const reasons = (attention?.reasons ?? []).filter((r) => r?.code === "basket-closable");
   if (!reasons.length) return null;
   return (
-    <ul className="mt-1.5 flex flex-wrap gap-1" aria-label={attention?.level === "green" ? "Can close in profit" : "Needs attention"}>
+    <ul className="mt-1.5 flex flex-wrap gap-1" aria-label="Can close in profit">
       {reasons.map((reason) => (
         <li
           key={reason.code}
-          className={`inline-flex items-center gap-1 rounded border px-1.5 text-xs font-medium ${levelStyle(reason.level).chip}`}
+          className={`inline-flex items-center gap-1 rounded border px-1.5 text-xs font-medium ${CLOSABLE.chip}`}
           title={reason.text}
         >
-          <ReasonIcon level={reason.level} className="h-3.5 w-3.5" />
+          <ClosableIcon className="h-3.5 w-3.5" />
           {reason.short}
         </li>
       ))}
     </ul>
   );
-}
-
-// The floating drawdown reason's own rule, so the figure is coloured
-// exactly when the account is listed for it.
-function floatingDdClass(dd) {
-  const level = floatingDdLevel(dd);
-  return level === "red" ? "text-down" : level === "amber" ? "text-warn" : "";
 }
 
 export default function AccountsTable({ rows }) {
@@ -87,9 +79,10 @@ export default function AccountsTable({ rows }) {
   // Eleven columns share the 1246px page width, so the cells are padded
   // less than other tables' and the headers wrap. Every figure sits in the
   // middle of its column, under its heading; the account stays on the left.
-  // A row with any attention reason is tinted by its worst level (red,
-  // amber, or green for a basket that could be closed in profit), with a
-  // bar down its left edge, and says why under the account's name.
+  // A row with a basket that could be closed now with the week still in
+  // profit is tinted green, with a bar down its left edge, and says so under
+  // the account's name. That is the only highlight: no other row, figure or
+  // state is coloured as a warning.
   return (
     <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
       <table className="w-full min-w-[900px] text-sm">
@@ -112,11 +105,10 @@ export default function AccountsTable({ rows }) {
         </thead>
         <tbody>
           {rows.map((r) => {
-            const level = r.attention?.level;
-            const tone = level ? levelStyle(level) : null;
+            const closable = r.attention?.level === "green";
             return (
-              <tr key={r.id} className={`border-b border-line/70 last:border-0 ${tone ? tone.row : "hover:bg-panel-2/60"}`}>
-                <td className={`min-w-52 px-3 py-2.5 ${tone ? tone.edge : ""}`}>
+              <tr key={r.id} className={`border-b border-line/70 last:border-0 ${closable ? CLOSABLE.row : "hover:bg-panel-2/60"}`}>
+                <td className={`min-w-52 px-3 py-2.5 ${closable ? CLOSABLE.edge : ""}`}>
                   <Link href={`/accounts/${r.id}`} className="group inline-flex flex-wrap items-center gap-x-2 font-medium text-ink hover:text-accent">
                     {r.label}
                     <span className="rounded border border-accent/40 bg-accent-soft px-1.5 text-xs font-medium whitespace-nowrap text-accent group-hover:border-accent">
@@ -126,7 +118,7 @@ export default function AccountsTable({ rows }) {
                   <span className="block text-xs text-muted">
                     {r.account_number ? `${r.account_number} · ${r.broker ?? r.server}` : "Not connected yet"}
                   </span>
-                  <ReasonChips attention={r.attention} />
+                  <ClosableChip attention={r.attention} />
                 </td>
                 {r.balance === null ? (
                   // Never synced: there is nothing to show yet, and 0.00% would
@@ -136,7 +128,7 @@ export default function AccountsTable({ rows }) {
                   <>
                     <td className="num px-3 py-2.5 text-center">{money(r.balance, r.currency)}</td>
                     <td className="num px-3 py-2.5 text-center">{money(r.equity, r.currency)}</td>
-                    <td className={`num px-3 py-2.5 text-center ${floatingDdClass(r.floatingDd)}`}>{pct(r.floatingDd)}</td>
+                    <td className="num px-3 py-2.5 text-center">{pct(r.floatingDd)}</td>
                     <BasketsCell r={r} />
                     <td className="num px-3 py-2.5 text-center">{pct(r.maxDd)}</td>
                     <td className="px-3 py-2.5 text-center"><Pnl value={r.periods.today.pnl} currency={r.currency} gain={r.periods.today.gain} /></td>

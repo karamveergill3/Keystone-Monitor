@@ -8,7 +8,6 @@ import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor, openPositionsFor, openBasketsFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { accountBaskets } from "@/lib/baskets";
-import { accountRisk } from "@/lib/risk";
 import { accountAttention, attentionItems } from "@/lib/attention";
 import { groupPeriods } from "@/lib/accountStats";
 import { todayKey, monthStart, addMonths } from "@/lib/days";
@@ -41,8 +40,7 @@ export default async function ProjectPage({ params }) {
     const row = accountRow(a, daily.get(a.id), today);
     const months = new Map(groupPeriods(daily.get(a.id) ?? [], row.balance, "month").map((m) => [m.key, m]));
     const baskets = accountBaskets({ rows: openMap.get(a.id), account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(a.id) });
-    const risk = accountRisk({ rows: openMap.get(a.id), account: row });
-    return { ...row, months, baskets, attention: accountAttention({ row, baskets, risk }) };
+    return { ...row, months, baskets, attention: accountAttention({ row, baskets }) };
   });
   const months = Array.from({ length: MONTHS_SHOWN }, (_, i) => addMonths(monthStart(today), -i));
 

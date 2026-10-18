@@ -6,7 +6,6 @@ import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor, openPositionsFor, openBasketsFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
 import { accountBaskets } from "@/lib/baskets";
-import { accountRisk } from "@/lib/risk";
 import { accountAttention, attentionItems } from "@/lib/attention";
 import { todayKey } from "@/lib/days";
 import { dayLabel } from "@/lib/format";
@@ -27,8 +26,7 @@ export default async function OverviewPage() {
   const rows = accounts.map((a) => {
     const row = accountRow(a, daily.get(a.id), today);
     const baskets = accountBaskets({ rows: openMap.get(a.id), account: row, weekRealised: row.periods.week.pnl, tracked: trackedMap.get(a.id) });
-    const risk = accountRisk({ rows: openMap.get(a.id), account: row });
-    return { ...row, baskets, attention: accountAttention({ row, baskets, risk }) };
+    return { ...row, baskets, attention: accountAttention({ row, baskets }) };
   });
 
   return (

@@ -176,10 +176,11 @@ function nearestFirst(a, b) {
   return a.symbol < b.symbol ? -1 : a.symbol > b.symbol ? 1 : 0;
 }
 
-// Everything the account page's Margin and stop-out section says, and what
-// the attention reasons read. Built only from openSnapshot's current rows,
-// so positions an earlier sync left behind never count. As with baskets,
-// every figure is as of the account's last sync.
+// Everything the account page's Margin and stop-out section says, as
+// plain figures: nothing on the site colours or flags them. Built only
+// from openSnapshot's current rows, so positions an earlier sync left
+// behind never count. As with baskets, every figure is as of the
+// account's last sync.
 //
 // With no margin in use (nothing open) the broker's levels do not apply,
 // so the equities, buffers and distances are all null. marginLevel is a

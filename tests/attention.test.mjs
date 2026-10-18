@@ -1,13 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LEVELS_ORDER, LIMITS, accountAttention, attentionItems, distanceLabel, floatingDdLevel, stopOutLevel } from "@/lib/attention";
+import * as attention from "@/lib/attention";
+import { accountAttention, attentionItems, distanceLabel } from "@/lib/attention";
 import { accountBaskets } from "@/lib/baskets";
-import { accountRisk } from "@/lib/risk";
 
-const NOW = Date.parse("2026-10-17T12:05:00Z");
 const SYNC = "2026-10-17T12:00:00+00:00";
+const NONE = { level: null, reasons: [] };
 
-// An accountRow (src/lib/accountView.js) with nothing wrong.
+// An accountRow (src/lib/accountView.js).
 function row(overrides = {}) {
   return {
     id: "a1",
@@ -20,37 +20,6 @@ function row(overrides = {}) {
     balance: 10_000,
     equity: 10_000,
     floatingDd: 0,
-    ...overrides,
-  };
-}
-
-// An accountRisk result whose nearest symbol is pct from stop-out.
-function riskAt(pct, overrides = {}) {
-  const price = 2_000;
-  const nearest = {
-    symbol: "XAUUSD",
-    netLots: 1.3,
-    side: "buy",
-    lots: 1.3,
-    price,
-    pointValue: 100,
-    decimals: 2,
-    stopOut: { move: price * pct, pct, price: price - price * pct },
-    marginCall: null,
-    hedged: false,
-  };
-  return {
-    state: "current",
-    levels: { mode: "percent", marginCall: 100, stopOut: 50 },
-    equity: 10_000,
-    margin: 1_000,
-    marginLevel: 1_000,
-    marginCallEquity: 1_000,
-    stopOutEquity: 500,
-    bufferToMarginCall: 9_000,
-    bufferToStopOut: 9_500,
-    symbols: [nearest],
-    nearest,
     ...overrides,
   };
 }
@@ -69,32 +38,50 @@ function closableBaskets(overrides = {}) {
 }
 
 // One open basket at floating, from real position rows, against a week.
-function realBaskets(floating, weekRealised) {
+// reported is the terminal's own count of open positions; above 1, the
+// EA's list is cut short.
+function realBaskets(floating, weekRealised, { reported = 1, archived_at = null } = {}) {
   const position = {
     ticket: "1", position_id: "1", symbol: "XAUUSD", side: "buy", volume: 1, open_price: 2650, current_price: 2638,
     sl: 0, tp: 0, swap: 0, profit: floating, open_time: "2026-10-17T08:00:00Z", magic: 1, updated_at: SYNC,
   };
   return accountBaskets({
     rows: [position],
-    account: { last_sync_at: SYNC, open_positions: 1, ea_version: "2026.10.17.5", balance: 10_000 },
+    account: { last_sync_at: SYNC, open_positions: reported, ea_version: "2026.10.17.5", balance: 10_000, archived_at },
     weekRealised,
   });
 }
 
-test("the limits are the agreed ones; levels run red, amber, green", () => {
-  assert.deepEqual({ ...LIMITS }, { floatingDdAmber: 0.05, floatingDdRed: 0.1, stopOutAmber: 0.05, stopOutRed: 0.02 });
-  assert.deepEqual([...LEVELS_ORDER], ["red", "amber", "green"]);
-  assert.ok(Object.isFrozen(LEVELS_ORDER));
+test("only the closable flag is left: no limits, levels or other reasons are exported", () => {
+  assert.deepEqual(Object.keys(attention).sort(), ["accountAttention", "attentionItems", "distanceLabel"]);
 });
 
-test("nothing wrong, nothing to say", () => {
-  const a = accountAttention({ row: row(), baskets: { weekRealised: 500, closable: [] }, risk: riskAt(0.2), now: NOW });
-  assert.deepEqual(a, { level: null, reasons: [] });
-  assert.deepEqual(accountAttention({ row: row(), now: NOW }), { level: null, reasons: [] });
+test("nothing closable, nothing to say, however the account looks", () => {
+  assert.deepEqual(accountAttention({ row: row(), baskets: { weekRealised: 500, closable: [] } }), NONE);
+  assert.deepEqual(accountAttention({ row: row() }), NONE);
+  // Deep floating drawdown, offline, an old EA, never synced, a list cut
+  // short: none of these says anything any more.
+  for (const overrides of [
+    { floatingDd: 0.5 },
+    { status: "offline", last_sync_at: "2026-10-10T09:00:00Z" },
+    { ea_version: "2026.10.17.1" },
+    { ea_version: null },
+    { last_sync_at: null, status: "waiting", balance: null },
+  ]) {
+    assert.deepEqual(accountAttention({ row: row(overrides) }), NONE, JSON.stringify(overrides));
+  }
+  assert.deepEqual(accountAttention({ row: null }), NONE);
+});
+
+test("near or at stop-out or margin call says nothing: a risk figure is not passed or read", () => {
+  // The old inputs are ignored outright.
+  const risk = { nearest: { stopOut: { move: 0, pct: 0 } }, equity: 1, marginCallEquity: 1_000, margin: 1_000, partial: true };
+  assert.deepEqual(accountAttention({ row: row(), risk }), NONE);
+  assert.deepEqual(codes(accountAttention({ row: row(), baskets: closableBaskets(), risk })), ["green:basket-closable"]);
 });
 
 test("a basket that could be closed with the week still up: one green reason", () => {
-  const a = accountAttention({ row: row(), baskets: closableBaskets(), now: NOW });
+  const a = accountAttention({ row: row(), baskets: closableBaskets() });
   assert.equal(a.level, "green");
   assert.deepEqual(codes(a), ["green:basket-closable"]);
   const r = a.reasons[0];
@@ -111,7 +98,6 @@ test("a basket that could be closed with the week still up: one green reason", (
         { symbol: "XAUUSD", side: "buy", floating: -300, leftover: 200, closable: true },
       ],
     },
-    now: NOW,
   });
   assert.deepEqual(codes(several), ["green:basket-closable"]);
   assert.equal(several.reasons[0].short, "2 baskets closable");
@@ -123,231 +109,82 @@ test("a basket that could be closed with the week still up: one green reason", (
 
 test("from real baskets: green only when closing still leaves the week up", () => {
   // The owner's example: 1,500 made, a basket at -1,200, closing it keeps 300.
-  const a = accountAttention({ row: row(), baskets: realBaskets(-1200, 1500), now: NOW });
+  const a = accountAttention({ row: row(), baskets: realBaskets(-1200, 1500) });
   assert.equal(a.level, "green");
   assert.equal(a.reasons[0].text, "XAUUSD buy at -$1,200.00 could be closed now and the week would stay +$300.00 (of this week's +$1,500.00).");
 
   // A basket as deep as the week, deeper, in profit, or a week flat or down:
   // no reason of any kind, no level.
   for (const [floating, week] of [[-1500, 1500], [-1500.01, 1500], [-1600, 1500], [40, 1500], [-10, 0], [-10, -250]]) {
-    assert.deepEqual(
-      accountAttention({ row: row(), baskets: realBaskets(floating, week), now: NOW }),
-      { level: null, reasons: [] },
-      `floating ${floating}, week ${week}`,
-    );
+    assert.deepEqual(accountAttention({ row: row(), baskets: realBaskets(floating, week) }), NONE, `floating ${floating}, week ${week}`);
   }
 });
 
-test("stop-out: red under 2%, amber under 5%, nothing from 5%", () => {
-  const at = (pct) => accountAttention({ row: row(), risk: riskAt(pct), now: NOW });
-  assert.deepEqual(codes(at(0.0199)), ["red:stop-out"]);
-  assert.deepEqual(codes(at(LIMITS.stopOutRed)), ["amber:stop-out"]);
-  assert.deepEqual(codes(at(0.0201)), ["amber:stop-out"]);
-  assert.deepEqual(codes(at(0.0499)), ["amber:stop-out"]);
-  assert.deepEqual(codes(at(LIMITS.stopOutAmber)), []);
-  assert.deepEqual(codes(at(0.0501)), []);
+test("nothing is closable while the EA's list is cut short", () => {
+  // The terminal has 520 open but the EA listed one: the basket may be
+  // deeper than it looks, so it is not marked, and nothing else is said.
+  assert.deepEqual(accountAttention({ row: row(), baskets: realBaskets(-1200, 1500, { reported: 520 }) }), NONE);
+});
 
-  const r = at(0.018).reasons[0];
-  assert.equal(r.short, "1.80% to stop-out");
-  assert.equal(
-    r.text,
-    "A 1.80% fall in XAUUSD (36.00 to 1,964.00) against 1.30 lots net long would bring equity down to the broker's stop-out (50% margin level, $500.00), with every other symbol held still.",
+test("archived accounts get nothing; offline ones only the green flag their last sync earns", () => {
+  const archived = row({ archived_at: "2026-10-01T00:00:00Z" });
+  assert.deepEqual(accountAttention({ row: archived, baskets: closableBaskets() }), NONE);
+  // accountBaskets itself marks nothing on an archived account.
+  assert.deepEqual(
+    accountAttention({ row: archived, baskets: realBaskets(-1200, 1500, { archived_at: archived.archived_at }) }),
+    NONE,
   );
+
+  const offline = row({ status: "offline", last_sync_at: "2026-10-17T09:05:00Z", floatingDd: 0.3, ea_version: "1" });
+  assert.deepEqual(accountAttention({ row: offline }), NONE);
+  const closable = accountAttention({ row: offline, baskets: closableBaskets() });
+  assert.equal(closable.level, "green");
+  assert.deepEqual(codes(closable), ["green:basket-closable"]);
 });
 
-test("stop-out on a short reads as a rise; at the level it says so", () => {
-  const short = riskAt(0.03);
-  short.nearest = { ...short.nearest, netLots: -2, side: "sell", stopOut: { move: 60, pct: 0.03, price: 2_060 } };
-  const r = accountAttention({ row: row(), risk: short, now: NOW }).reasons[0];
-  assert.match(r.text, /^A 3\.00% rise in XAUUSD \(60\.00 to 2,060\.00\) against 2\.00 lots net short/);
-
-  const gone = accountAttention({ row: row(), risk: riskAt(0, { equity: 400, levels: { mode: "money", marginCall: 800, stopOut: 500 } }), now: NOW });
-  assert.equal(gone.reasons[0].level, "red");
-  assert.equal(gone.reasons[0].short, "At stop-out");
-  assert.equal(gone.reasons[0].text, "Equity of $400.00 is at or below the broker's stop-out ($500.00 equity).");
-});
-
-test("margin call: red at or below the margin-call equity, only with margin in use", () => {
-  const at = (equity, extra = {}) =>
-    accountAttention({ row: row(), risk: riskAt(0.5, { equity, marginLevel: equity / 10, ...extra }), now: NOW });
-  assert.deepEqual(codes(at(1_000.01)), []);
-  const a = at(1_000);
-  assert.deepEqual(codes(a), ["red:margin-call"]);
-  assert.equal(a.reasons[0].short, "At margin call");
-  assert.equal(
-    a.reasons[0].text,
-    "Equity of $1,000.00 is at or below the broker's margin call (100% margin level, $1,000.00); the margin level is 100%.",
-  );
-  assert.deepEqual(codes(at(999.99)), ["red:margin-call"]);
-  assert.deepEqual(codes(at(0, { margin: 0, marginCallEquity: null })), []);
-});
-
-test("floating drawdown: amber from 5%, red from 10%", () => {
-  const at = (dd) => accountAttention({ row: row({ floatingDd: dd }), now: NOW });
-  assert.deepEqual(codes(at(0.0499)), []);
-  assert.deepEqual(codes(at(LIMITS.floatingDdAmber)), ["amber:floating-dd"]);
-  assert.deepEqual(codes(at(0.0501)), ["amber:floating-dd"]);
-  assert.deepEqual(codes(at(0.0999)), ["amber:floating-dd"]);
-  assert.deepEqual(codes(at(LIMITS.floatingDdRed)), ["red:floating-dd"]);
-  assert.deepEqual(codes(at(0.1001)), ["red:floating-dd"]);
-  // A share that lands a hair under 10% from float arithmetic is still 10%.
-  assert.deepEqual(codes(at(0.09999999999999998)), ["red:floating-dd"]);
-
-  const r = at(0.072).reasons[0];
-  assert.equal(r.short, "Floating DD 7.20%");
-  assert.equal(r.text, "Open trades are 7.20% under water ($720.00 of the $10,000.00 balance).");
-});
-
-test("a threshold applies to the figure as shown, to two decimals of a percent", () => {
-  // 9.996% shows as 10.00%, so it is red, as the 10% rule says; 4.994% shows as 4.99% and is not listed.
-  assert.equal(floatingDdLevel(0.09996), "red");
-  assert.equal(floatingDdLevel(0.04994), null);
-  assert.equal(floatingDdLevel(0.04996), "amber");
-  assert.equal(floatingDdLevel(null), null);
-  // 4.996% to stop-out shows as 5.00%: not under 5%. 1.996% shows as 2.00%: amber, not red.
-  assert.equal(stopOutLevel(0.04996), null);
-  assert.equal(stopOutLevel(0.04994), "amber");
-  assert.equal(stopOutLevel(0.01996), "amber");
-  assert.equal(stopOutLevel(0.01994), "red");
-  assert.equal(stopOutLevel(undefined), null);
-  // A move still there never prints as 0.00%, which would read as reached.
+test("distanceLabel: two decimals, never 0.00% for a move still there", () => {
   assert.equal(distanceLabel(0.00002), "under 0.01%");
   assert.equal(distanceLabel(0.0183), "1.83%");
+  assert.equal(distanceLabel(0), "0.00%");
   assert.equal(distanceLabel(null), "-");
-  const tiny = accountAttention({ row: row(), risk: riskAt(0.00002), now: NOW }).reasons[0];
-  assert.equal(tiny.short, "under 0.01% to stop-out");
+  assert.equal(distanceLabel("abc"), "-");
 });
 
-test("margin in use but stop-out not checked: amber, saying why", () => {
-  // EA 2026.10.17.4 lists positions but sends no broker levels.
-  const old = accountAttention({
-    row: row({ ea_version: "2026.10.17.4", margin: 15_900 }),
-    risk: riskAt(0.5, { levels: null, nearest: null, stopOutEquity: null, marginCallEquity: null, bufferToStopOut: null, bufferToMarginCall: null }),
-    now: NOW,
-  });
-  assert.deepEqual(codes(old), ["amber:stop-out-unchecked"]);
-  assert.match(old.reasons[0].text, /^EA 2026\.10\.17\.4 does not send the broker's margin call and stop-out levels/);
-  assert.match(old.reasons[0].text, /Attach EA 2026\.10\.17\.5 or later\.$/);
-
-  // Levels known, but a symbol with no point value has no distance.
-  const noValue = riskAt(0.5);
-  noValue.symbols = [...noValue.symbols, { symbol: "BTCUSD", netLots: 1, side: "buy", pointValue: null, hedged: false, stopOut: null, marginCall: null }];
-  const nv = accountAttention({ row: row(), risk: noValue, now: NOW });
-  assert.deepEqual(codes(nv), ["amber:stop-out-unchecked"]);
-  assert.equal(nv.reasons[0].text, "The terminal sent no point value for BTCUSD, so its distance to stop-out is not checked.");
-
-  // A hedged symbol needs no point value; nothing open needs no levels.
-  const hedged = riskAt(0.5);
-  hedged.symbols = [...hedged.symbols, { symbol: "EURUSD", netLots: 0, side: null, pointValue: null, hedged: true, stopOut: null, marginCall: null }];
-  assert.deepEqual(codes(accountAttention({ row: row(), risk: hedged, now: NOW })), []);
-  assert.deepEqual(codes(accountAttention({ row: row({ ea_version: "2026.10.17.4" }), risk: riskAt(0.5, { levels: null, margin: 0 }), now: NOW })), []);
-  // An EA too old to list positions has its own reason instead.
-  assert.deepEqual(codes(accountAttention({ row: row({ ea_version: "2026.10.17.1" }), risk: riskAt(0.5, { levels: null }), now: NOW })), ["amber:ea-old"]);
-});
-
-test("a list cut short at the EA's 500: amber, saying the distances may be longer than real", () => {
-  const a = accountAttention({ row: row(), risk: riskAt(0.5, { partial: true, listed: 500, reported: 520 }), now: NOW });
-  assert.deepEqual(codes(a), ["amber:partial-list"]);
-  assert.equal(
-    a.reasons[0].text,
-    "The EA listed 500 of the 520 positions open, so baskets and distances to stop-out are from part of the book and may look safer than they are.",
-  );
-});
-
-test("offline: amber, saying the figures are from the last sync", () => {
-  const sync = "2026-10-17T09:05:00Z";
-  const a = accountAttention({ row: row({ status: "offline", last_sync_at: sync }), now: NOW });
-  assert.deepEqual(codes(a), ["amber:offline"]);
-  assert.equal(a.reasons[0].short, "Offline 3 h");
-  assert.equal(a.reasons[0].text, "No sync for 3 h, so every figure here is from the last sync at 17 Oct 2026, 10:05.");
-  assert.deepEqual(codes(accountAttention({ row: row({ status: "online" }), now: NOW })), []);
-});
-
-test("an EA that does not list open positions: amber", () => {
-  const a = accountAttention({ row: row({ ea_version: "2026.10.17.1" }), now: NOW });
-  assert.deepEqual(codes(a), ["amber:ea-old"]);
-  assert.equal(a.reasons[0].short, "EA too old");
-  assert.match(a.reasons[0].text, /^EA 2026\.10\.17\.1 does not send its open positions/);
-  assert.deepEqual(codes(accountAttention({ row: row({ ea_version: null }), now: NOW })), ["amber:ea-old"]);
-  assert.deepEqual(codes(accountAttention({ row: row({ ea_version: "2026.10.17.2" }), now: NOW })), []);
-});
-
-test("archived accounts get no reasons; never-synced ones only 'waiting'", () => {
-  const bad = { row: row({ floatingDd: 0.5, status: "offline", ea_version: "1" }), risk: riskAt(0, { equity: 400 }), now: NOW };
-  bad.baskets = closableBaskets();
-  assert.equal(accountAttention(bad).reasons.length, 6);
-  assert.deepEqual(accountAttention({ ...bad, row: { ...bad.row, archived_at: "2026-10-01T00:00:00Z" } }), { level: null, reasons: [] });
-  const waiting = accountAttention({ ...bad, row: { ...bad.row, last_sync_at: null, status: "waiting" } });
-  assert.deepEqual(codes(waiting), ["amber:waiting"]);
-  assert.equal(waiting.reasons[0].short, "Waiting for first sync");
-  assert.deepEqual(accountAttention({ row: null }), { level: null, reasons: [] });
-});
-
-test("red reasons come first, then amber, then green, each in the fixed order", () => {
-  const a = accountAttention({
-    row: row({ floatingDd: 0.06, status: "offline", last_sync_at: "2026-10-17T11:00:00Z", ea_version: "2026.10.17.5" }),
-    baskets: closableBaskets(),
-    risk: riskAt(0.03, { equity: 900 }),
-    now: NOW,
-  });
-  assert.equal(a.level, "red");
-  assert.deepEqual(codes(a), ["red:margin-call", "amber:stop-out", "amber:floating-dd", "amber:offline", "green:basket-closable"]);
-
-  const amber = accountAttention({ row: row({ floatingDd: 0.06 }), now: NOW });
-  assert.equal(amber.level, "amber");
-});
-
-test("an account's level is its worst reason's: red over amber over green", () => {
-  const at = (overrides, risk) => accountAttention({ row: row(overrides), baskets: closableBaskets(), risk, now: NOW });
-  const green = at({});
-  assert.equal(green.level, "green");
-  assert.deepEqual(codes(green), ["green:basket-closable"]);
-
-  const amber = at({ floatingDd: 0.06 });
-  assert.equal(amber.level, "amber");
-  assert.deepEqual(codes(amber), ["amber:floating-dd", "green:basket-closable"]);
-
-  const red = at({ floatingDd: 0.12 });
-  assert.equal(red.level, "red");
-  assert.deepEqual(codes(red), ["red:floating-dd", "green:basket-closable"]);
-
-  const all = at({ floatingDd: 0.06 }, riskAt(0.01));
-  assert.equal(all.level, "red");
-  assert.deepEqual(codes(all), ["red:stop-out", "amber:floating-dd", "green:basket-closable"]);
-});
-
-test("works from a real accountRisk: the worked example is nowhere near", () => {
-  const risk = accountRisk({
-    rows: [{ ticket: "1", symbol: "XAUUSD", side: "buy", volume: 1.3, current_price: 2633.3, open_price: 2650, profit: -2171, point_value: 100, updated_at: SYNC }],
-    account: { last_sync_at: SYNC, open_positions: 1, equity: 49_878.84, margin: 1_239.41, stop_out_mode: "percent", margin_call_level: 100, stop_out_level: 50 },
-  });
-  assert.deepEqual(accountAttention({ row: row(), risk, now: NOW }).reasons, []);
-});
-
-test("attention items: red, then amber, then green, then by label, none without a level", () => {
-  const red = { level: "red", reasons: [{ level: "red", code: "floating-dd" }] };
-  const amber = { level: "amber", reasons: [{ level: "amber", code: "offline" }] };
-  const green = { level: "green", reasons: [{ level: "green", code: "basket-closable" }] };
+test("attention items: only accounts with a closable basket, by label", () => {
+  const green = { level: "green", reasons: [{ level: "green", code: "basket-closable", short: "1 basket closable" }] };
+  // Anything else, even a stray old-style reason, is never listed.
+  const stray = { level: "red", reasons: [{ level: "red", code: "floating-dd" }] };
+  const mixed = {
+    level: "red",
+    reasons: [{ level: "red", code: "stop-out" }, { level: "green", code: "basket-closable", short: "2 baskets closable" }],
+  };
   const items = attentionItems([
-    { id: "1", label: "Bravo", currency: "USD", last_sync_at: SYNC, attention: amber },
+    { id: "1", label: "Bravo", currency: "USD", last_sync_at: SYNC, attention: green },
+    { id: "2", label: "Delta", currency: "GBP", last_sync_at: SYNC, attention: stray },
     { id: "7", label: "Able", currency: "USD", last_sync_at: SYNC, attention: green },
-    { id: "2", label: "Delta", currency: "GBP", last_sync_at: SYNC, attention: red },
-    { id: "3", label: "Alpha", currency: "USD", last_sync_at: SYNC, attention: amber },
-    { id: "8", label: "Zulu", currency: "EUR", last_sync_at: SYNC, attention: green },
-    { id: "4", label: "Charlie", currency: "USD", last_sync_at: SYNC, attention: red },
-    { id: "5", label: "Echo", currency: "USD", last_sync_at: SYNC, attention: { level: null, reasons: [] } },
+    { id: "8", label: "Zulu", currency: "EUR", last_sync_at: null, attention: green },
+    { id: "9", label: "Charlie", attention: mixed },
+    { id: "5", label: "Echo", currency: "USD", last_sync_at: SYNC, attention: NONE },
     { id: "6", label: "Foxtrot", currency: "USD", last_sync_at: SYNC },
     null,
   ]);
-  assert.deepEqual(items.map((i) => [i.level, i.label]), [
-    ["red", "Charlie"],
-    ["red", "Delta"],
-    ["amber", "Alpha"],
-    ["amber", "Bravo"],
-    ["green", "Able"],
-    ["green", "Zulu"],
-  ]);
-  assert.deepEqual(items[1], { accountId: "2", label: "Delta", currency: "GBP", lastSyncAt: SYNC, level: "red", reasons: red.reasons });
-  assert.deepEqual(items[5], { accountId: "8", label: "Zulu", currency: "EUR", lastSyncAt: SYNC, level: "green", reasons: green.reasons });
+  assert.deepEqual(items.map((i) => i.label), ["Able", "Bravo", "Charlie", "Zulu"]);
+  assert.deepEqual(items[0], { accountId: "7", label: "Able", currency: "USD", lastSyncAt: SYNC, reasons: green.reasons });
+  assert.deepEqual(items[2], { accountId: "9", label: "Charlie", currency: "USD", lastSyncAt: null, reasons: [mixed.reasons[1]] });
+  assert.deepEqual(items[3], { accountId: "8", label: "Zulu", currency: "EUR", lastSyncAt: null, reasons: green.reasons });
   assert.deepEqual(attentionItems(null), []);
+  assert.deepEqual(attentionItems([{ id: "1", label: "A", attention: stray }]), []);
+});
+
+test("attention items from real accounts: archived, offline and never-synced ones only when closable", () => {
+  const rows = [
+    row({ id: "1", label: "Offline closable", status: "offline" }),
+    row({ id: "2", label: "Archived", archived_at: "2026-10-01T00:00:00Z" }),
+    row({ id: "3", label: "Never synced", last_sync_at: null, status: "waiting" }),
+    row({ id: "4", label: "Deep drawdown", floatingDd: 0.4 }),
+  ].map((r) => ({
+    ...r,
+    attention: accountAttention({ row: r, baskets: r.id === "1" || r.id === "2" ? closableBaskets() : undefined }),
+  }));
+  assert.deepEqual(attentionItems(rows).map((i) => i.label), ["Offline closable"]);
 });

@@ -4,10 +4,34 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
-## 2026-10-17 (Claude Code, Mac): Needs-attention highlights and distance to stop-out; all live
+## 2026-10-17 (Claude Code, Mac): Distance to stop-out; highlights cut to the green closable flag (18 Oct)
 
 ### What changed
 
+- (18 Oct) Every warning is gone, by the owner's choice: the green
+  closable basket flag is the only highlight on the site. Nothing is
+  flagged or coloured for an offline terminal, stop-out or margin call
+  (near or reached), floating drawdown, stop-out not checked, a position
+  list cut short, an old EA or a terminal waiting for its first sync.
+  `src/lib/attention.js` keeps only `accountAttention()` (`{ level:
+  "green", reasons: [basket-closable] }` or `{ level: null, reasons: [] }`;
+  archived accounts get nothing), `attentionItems()` (closable accounts
+  only, by label) and `distanceLabel()`; `LIMITS`, `LEVELS_ORDER`,
+  `stopOutLevel()` and `floatingDdLevel()` are removed, and
+  `accountAttention()` no longer takes `risk` or `now`. The panel on the
+  overview and project pages shows only "{n} account(s) can close a basket
+  and stay up for the week", or one quiet line, "No basket can be closed
+  in profit right now."; the accounts table tints and tags a row green
+  only for the flag (Floating DD is a plain figure); the account page's
+  banner shows only the flag. The Margin and stop-out section keeps every
+  figure, uncoloured, with no icons or Act now/Watch labels. The sync dot
+  keeps its shapes (filled, hollow ring, dashed ring) in one neutral
+  colour, and Archived is muted. `src/components/AttentionBanner.js`
+  exports `CLOSABLE`, `CheckIcon`, `ClosableIcon` and `ReasonLine` in
+  place of `LEVELS`, `levelStyle`, `worstLevel`, `distanceLevel` and
+  `ReasonIcon`; `WarnIcon.js` is deleted. The closable flag itself is
+  unchanged, including that nothing is closable while the EA's list is
+  cut short.
 - (18 Oct) The basket flag is now green, not red: a basket is marked
   closable when it is in loss and this week's realised profit is more than
   that loss, so closing it now still leaves the week up (made +1,500, a
@@ -16,19 +40,19 @@ machines. Keep the four headings.
   `src/lib/baskets.js` replace `isDeeperThanWeek()` and `flagReason()`;
   `accountBaskets()` gives `closable` (and per basket `closable`,
   `leftover`) in place of `flagged` and `banked`; attention's red
-  `basket-week` reason is now the green `basket-closable` one, and levels
-  run red, amber, green.
-- No alerts of any kind, by the owner's choice: the site highlights what
-  needs looking at. `src/lib/attention.js` gives each account its reasons
-  (red: under 2% from stop-out, at margin call, floating drawdown from
-  10%; amber: under 5% from stop-out, floating drawdown from 5%, stop-out
-  not checked, a position list cut short at 500, offline, EA too old,
-  waiting for a first sync; green, from 18 Oct: a basket closable with the
-  week still up). They show in a Needs attention panel on the overview
-  and project pages (one calm line when nothing is wrong), as tinted rows
-  with reason tags in the accounts table, and as a banner on the account
-  page. Thresholds are `LIMITS` in that file and apply to figures as shown
-  (two decimals).
+  `basket-week` reason is now the green `basket-closable` one (later the
+  same day, the only one: see above).
+- No alerts of any kind, by the owner's choice. (Removed 18 Oct, see the
+  first bullet: what follows is how it was on 17 Oct.) The site
+  highlighted what needed looking at: `src/lib/attention.js` gave each
+  account its reasons (red: under 2% from stop-out, at margin call,
+  floating drawdown from 10%; amber: under 5% from stop-out, floating
+  drawdown from 5%, stop-out not checked, a position list cut short at
+  500, offline, EA too old, waiting for a first sync; green, from 18 Oct:
+  a basket closable with the week still up), shown in a Needs attention
+  panel on the overview and project pages, as tinted rows with reason
+  tags in the accounts table, and as a banner on the account page, with
+  thresholds in `LIMITS`.
 - Distance to stop-out (`src/lib/risk.js`): per symbol, net lots times the
   point value against the equity above the broker's margin call and
   stop-out, shown in the account page's Margin and stop-out section. The
@@ -43,16 +67,22 @@ machines. Keep the four headings.
 
 ### Why
 
-Grid bots fail by trending into stop-out; the owner wants every account's
-risk visible on the site without notifications.
+Grid bots fail by trending into stop-out, so every account's margin and
+distance to stop-out is on its page. On 18 Oct the owner chose to have no
+warnings at all, only the green flag for a basket that can be closed with
+the week still up.
 
 ### Watch out
 
-- Until a terminal runs EA 2026.10.17.5 its account shows "Stop-out not
-  checked" whenever it has margin in use. That is deliberate: the panel
-  must never say "nothing near stop-out" for an account it could not
-  check.
-- The demo account is never synced, so it shows Offline after 10 minutes.
+- Since 18 Oct nothing on the site says an account is near stop-out,
+  offline or unchecked: read the figures. Until a terminal runs EA
+  2026.10.17.5 its Margin and stop-out section has no distances (it says
+  the EA does not send the broker's levels), and the panel says nothing
+  about it.
+- The demo account is never synced, so its sync dot is a hollow ring
+  (offline) after 10 minutes; nothing else marks it.
+- The 18 Oct change was checked with `npm test`, `npm run lint` and a
+  server render of the changed components; `npm run build` was not run.
 
 ### Still needs a human
 

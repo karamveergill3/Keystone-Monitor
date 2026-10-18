@@ -1,5 +1,5 @@
 import Pnl from "@/components/Pnl";
-import { LEVELS, ReasonIcon } from "@/components/AttentionBanner";
+import { CLOSABLE, ClosableIcon } from "@/components/AttentionBanner";
 import { closeReason } from "@/lib/baskets";
 import { ago, londonTime, money, number, pct } from "@/lib/format";
 
@@ -59,7 +59,7 @@ export default function BasketsTable({ view, currency }) {
 
   const { baskets, deepest, weekRealised } = view;
   const closable = Array.isArray(view.closable) ? view.closable : [];
-  const green = LEVELS.green;
+  const green = CLOSABLE;
   const [bannerHead, bannerTail] = closableBanner(closable.length, weekRealised, currency);
 
   return (
@@ -82,7 +82,7 @@ export default function BasketsTable({ view, currency }) {
       {closable.length > 0 && (
         <p className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${green.box} ${green.text}`}>
           <span className="mt-1 inline-flex">
-            <ReasonIcon level="green" />
+            <ClosableIcon />
           </span>
           <span>
             <span className="font-semibold">{bannerHead}</span>
@@ -127,7 +127,7 @@ export default function BasketsTable({ view, currency }) {
                     {b.closable && (
                       <span className={`mt-0.5 flex items-start gap-1 text-xs font-medium ${green.text}`}>
                         <span className="mt-0.5 inline-flex">
-                          <ReasonIcon level="green" className="h-3.5 w-3.5" />
+                          <ClosableIcon className="h-3.5 w-3.5" />
                         </span>
                         {closeReason(b, currency)}
                       </span>

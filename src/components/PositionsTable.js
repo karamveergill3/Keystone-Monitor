@@ -76,7 +76,7 @@ export default function PositionsTable({ title, rows, total, page, pageSize, cur
                   </td>
                   <td className="num px-3 py-1.5 text-right">
                     {number(p.volume_out, 2)}
-                    {partial && <span className="ml-1 rounded bg-warn-soft px-1 text-xs text-warn" title={`${number(p.volume_in, 2)} lots opened, part still open`}>part</span>}
+                    {partial && <span className="ml-1 rounded bg-panel-2 px-1 text-xs text-muted" title={`${number(p.volume_in, 2)} lots opened, part still open`}>part</span>}
                   </td>
                   <td className="num px-3 py-1.5 text-right">{p.open_price === null ? "-" : number(p.open_price, d)}</td>
                   <td className="num px-3 py-1.5 text-right">{p.close_price === null ? "-" : number(p.close_price, d)}</td>

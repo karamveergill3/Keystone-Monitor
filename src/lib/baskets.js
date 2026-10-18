@@ -6,7 +6,7 @@
 // the same side. Magic numbers are ignored on purpose: some grid EAs give
 // every grid level its own magic, and splitting on it would hide how deep
 // a basket really is. Merging two EAs' positions on one symbol overstates
-// the depth instead, which is the safe direction for a risk alert. A
+// the depth instead, which is the safe direction for a risk figure. A
 // position with no symbol or no side is in no basket. track_baskets() in
 // supabase/schema.sql groups the same way, so its rows line up by key.
 //

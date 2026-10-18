@@ -1,10 +1,8 @@
-import { ReasonIcon, distanceLevel, levelStyle } from "@/components/AttentionBanner";
 import { distanceLabel } from "@/lib/attention";
 import { money, number } from "@/lib/format";
 import { BROKER_LEVELS_EA } from "@/lib/openPositions";
 
 const EMPTY = "rounded-lg border border-line bg-panel p-6 text-sm text-muted";
-
 
 function sideClass(side) {
   return side === "buy" ? "text-up" : side === "sell" ? "text-down" : "text-muted";
@@ -25,14 +23,14 @@ function levelsText(levels, currency) {
   return parts.join(", ");
 }
 
-// A figure box like StatTile's, which can take a level's colours.
-function Figure({ label, level, children, sub }) {
-  const tone = level ? levelStyle(level) : null;
+// A figure box like StatTile's. Always plain: nothing here is coloured or
+// flagged, however close the account is to a level. The site's one
+// highlight is a closable basket (src/lib/attention.js).
+function Figure({ label, children, sub }) {
   return (
-    <div className={`rounded-md border px-4 py-3.5 ${tone ? tone.box : "hud border-line bg-panel"}`}>
-      <p className={`text-xs font-medium tracking-wider uppercase ${tone ? tone.text : "text-muted"}`}>{label}</p>
-      <div className={`num mt-1 flex items-center gap-2 text-base font-semibold [overflow-wrap:anywhere] sm:text-xl ${tone ? tone.text : ""}`}>
-        {tone && <ReasonIcon level={level} className="h-4 w-4 sm:h-5 sm:w-5" />}
+    <div className="hud rounded-md border border-line bg-panel px-4 py-3.5">
+      <p className="text-xs font-medium tracking-wider text-muted uppercase">{label}</p>
+      <div className="num mt-1 text-base font-semibold [overflow-wrap:anywhere] sm:text-xl">
         <span>{children}</span>
       </div>
       {sub && <p className="mt-1 text-xs text-muted">{sub}</p>}
@@ -71,7 +69,6 @@ function Summary({ risk, currency }) {
   const atMarginCall = bufferToMarginCall !== null && bufferToMarginCall <= 0;
   const atStopOut = bufferToStopOut !== null && bufferToStopOut <= 0;
   const nearestReached = nearest?.stopOut.move === 0;
-  const nearestLevel = nearest ? (nearestReached ? "red" : distanceLevel(nearest.stopOut.pct)) : null;
   const equitySub = [
     bufferWords(bufferToMarginCall, currency, "margin call"),
     risk.stopOutEquity !== null && `stop-out at equity ${money(risk.stopOutEquity, currency)}`,
@@ -92,14 +89,14 @@ function Summary({ risk, currency }) {
 
   return (
     <div className="grid gap-3 sm:grid-cols-3">
-      <Figure label="Margin level" level={atStopOut || atMarginCall ? "red" : null} sub={levelsText(levels, currency)}>
+      <Figure label="Margin level" sub={levelsText(levels, currency)}>
         {marginLevel === null ? "-" : `${number(marginLevel, 0)}%`}
         {atStopOut ? " · at stop-out" : atMarginCall ? " · at margin call" : ""}
       </Figure>
-      <Figure label={atStopOut ? "Equity below stop-out" : "Equity above stop-out"} level={atStopOut ? "red" : null} sub={equitySub}>
+      <Figure label={atStopOut ? "Equity below stop-out" : "Equity above stop-out"} sub={equitySub}>
         {bufferToStopOut === null ? "-" : money(Math.abs(bufferToStopOut), currency)}
       </Figure>
-      <Figure label="Nearest to stop-out" level={nearestLevel} sub={nearestSub}>
+      <Figure label="Nearest to stop-out" sub={nearestSub}>
         {!nearest ? "-" : nearestReached ? "Reached" : distanceLabel(nearest.stopOut.pct)}
       </Figure>
     </div>
@@ -108,17 +105,16 @@ function Summary({ risk, currency }) {
 
 // One distance: the price at the level, then the move from now (signed:
 // a net buy gets there by falling) and the move as a share of the price.
-// Reached when equity is already at or below the level.
-function DistanceCell({ d, s, level }) {
-  const tone = level ? levelStyle(level) : null;
+// Reached when equity is already at or below the level, said in plain
+// words: no distance is coloured, however short.
+function DistanceCell({ d, s }) {
   if (!d) {
     return <td className="num px-4 py-2.5 text-right text-muted">-</td>;
   }
   const sign = s.netLots > 0 ? "-" : "+";
   return (
-    <td className={`px-4 py-2.5 text-right ${tone ? tone.cell : ""}`}>
+    <td className="px-4 py-2.5 text-right">
       <span className="flex items-center justify-end gap-1.5">
-        {tone && <ReasonIcon level={level} className="h-3.5 w-3.5" />}
         {d.move === 0 ? (
           <span className="font-medium">Reached</span>
         ) : d.price === null ? (
@@ -130,7 +126,7 @@ function DistanceCell({ d, s, level }) {
         )}
       </span>
       {d.move > 0 && (
-        <span className={`block text-xs whitespace-nowrap ${tone ? "" : "text-muted"}`}>
+        <span className="block text-xs whitespace-nowrap text-muted">
           <span className="num">{`${sign}${number(d.move, s.decimals)}`}</span> · <span className="num">{distanceLabel(d.pct)}</span>
         </span>
       )}
@@ -229,7 +225,7 @@ export default function RiskPanel({ risk, currency }) {
       <Summary risk={risk} currency={currency} />
       {levelsNote}
       {risk.partial && (
-        <p className="text-xs text-warn">
+        <p className="text-xs text-muted">
           {`Built from the ${number(risk.listed, 0)} positions the EA listed, of ${number(risk.reported, 0)} open on the terminal, so the real distances may be shorter.`}
         </p>
       )}
@@ -258,32 +254,28 @@ export default function RiskPanel({ risk, currency }) {
             </tr>
           </thead>
           <tbody>
-            {symbols.map((s) => {
-              const soLevel = s.stopOut ? (s.stopOut.move === 0 ? "red" : distanceLevel(s.stopOut.pct)) : null;
-              const mcLevel = s.marginCall?.move === 0 ? "red" : null;
-              return (
-                <tr key={s.symbol} className="border-b border-line/70 last:border-0">
-                  <td className={`px-4 py-2.5 font-medium text-ink ${soLevel ? levelStyle(soLevel).edge : ""}`}>{s.symbol}</td>
-                  <ExposureCell s={s} />
-                  <td className="num px-4 py-2.5 text-right">{s.price === null ? "-" : number(s.price, s.decimals)}</td>
-                  <ValueCell s={s} currency={currency} />
-                  {levels && (
-                    <>
-                      {s.hedged ? (
-                        <td colSpan={2} className="px-4 py-2.5 text-right text-xs text-muted">
-                          Hedged: buys and sells net to flat, so no distance
-                        </td>
-                      ) : (
-                        <>
-                          <DistanceCell d={s.marginCall} s={s} level={mcLevel} />
-                          <DistanceCell d={s.stopOut} s={s} level={soLevel} />
-                        </>
-                      )}
-                    </>
-                  )}
-                </tr>
-              );
-            })}
+            {symbols.map((s) => (
+              <tr key={s.symbol} className="border-b border-line/70 last:border-0">
+                <td className="px-4 py-2.5 font-medium text-ink">{s.symbol}</td>
+                <ExposureCell s={s} />
+                <td className="num px-4 py-2.5 text-right">{s.price === null ? "-" : number(s.price, s.decimals)}</td>
+                <ValueCell s={s} currency={currency} />
+                {levels && (
+                  <>
+                    {s.hedged ? (
+                      <td colSpan={2} className="px-4 py-2.5 text-right text-xs text-muted">
+                        Hedged: buys and sells net to flat, so no distance
+                      </td>
+                    ) : (
+                      <>
+                        <DistanceCell d={s.marginCall} s={s} />
+                        <DistanceCell d={s.stopOut} s={s} />
+                      </>
+                    )}
+                  </>
+                )}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

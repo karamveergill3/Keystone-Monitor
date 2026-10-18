@@ -45,7 +45,9 @@ Anyone with the link       --->                                       account_po
   (`SYMBOL_TRADE_TICK_VALUE_LOSS` over `SYMBOL_TRADE_TICK_SIZE`, 0 when the
   terminal cannot say). Together they say how far price can move against
   each symbol's open lots before the broker calls margin or closes
-  positions, the main risk for a grid. They are stored as
+  positions, the main risk for a grid. The account page's Margin and
+  stop-out section shows those distances as plain figures; nothing is
+  coloured or flagged however close they get. They are stored as
   `accounts.stop_out_mode` (`percent`, a margin level, or `money`, an
   equity figure), `margin_call_level` and `stop_out_level`, and
   `open_positions.point_value`. An older EA sends none of them; its syncs
@@ -54,7 +56,7 @@ Anyone with the link       --->                                       account_po
 - **Grid baskets are tracked for their drawdown.** A basket is every open
   position on one account with the same symbol and side, whatever their
   magic numbers (a grid EA may give each level its own; merging two EAs'
-  positions overstates a basket, the safe direction for a risk alert).
+  positions overstates a basket, the safe direction for a risk figure).
   Its floating P&L is profit + swap over its positions; its drawdown is how
   far that is below zero. With each snapshot, in the same transaction,
   `track_baskets` in `schema.sql` keeps one `baskets` row per basket's
@@ -77,8 +79,22 @@ Anyone with the link       --->                                       account_po
   leave the week up. A week of +1,500 and a basket at -1,200 is closable,
   keeping +300. Each basket is judged against the week on its own, to the
   cent as shown; a loss that would take the week to zero or below, a basket
-  in profit, a flat or losing week and an archived account mark nothing at
-  all. Logic in `src/lib/baskets.js` (`canCloseInProfit`).
+  in profit, a flat or losing week, an archived account and a position list
+  cut short at the EA's 500 mark nothing at all. Logic in
+  `src/lib/baskets.js` (`canCloseInProfit`) and `src/lib/attention.js`.
+- **That green flag is the site's only highlight.** It shows in a panel on
+  the overview and project pages (one quiet line when no basket can be
+  closed), as a green row and chip in the accounts table, in the Baskets
+  column, as a banner on the account page and on the basket itself. There
+  are no notifications and no other warnings, by the owner's choice: an
+  offline terminal, a deep floating drawdown, an account near margin call
+  or stop-out, an old EA or a list cut short is never coloured or listed.
+  Those figures are still shown, plainly: sync status is a dot in one
+  neutral colour (filled syncing, hollow ring offline, dashed ring
+  waiting), and margin and stop-out are figures on the account page.
+  Colour anywhere else labels a figure and never warns: P&L by its sign,
+  buy and sell, and the charts. Deposit, withdrawal and part-closed tags
+  are plain grey.
 - **One key per account.** Made on the admin screen, shown once, stored only
   as a SHA-256. The first sync binds the key to that login and server; the
   same key from a different login is refused.
