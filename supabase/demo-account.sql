@@ -5,8 +5,9 @@
 -- account: a $50,000 deposit, about four months of weekday trades (the last
 -- 30 days as grid baskets, each closed together), a $3,000 withdrawal, 30
 -- days of 15-minute equity samples, and three grid baskets open now. The
--- gold buy basket is deep enough in drawdown to be flagged: its floating
--- loss is more than the week's realised profit, whatever day it is run.
+-- gold buy basket's floating loss is more than the week's realised profit,
+-- so it is not marked closable; the EURUSD sell basket's small loss is
+-- less, so it is marked closable (green) on most days it is run.
 -- Nothing in it is a real account.
 --
 -- MARKET TIME. Markets are shut from Friday 22:00 to Sunday 22:00, London.

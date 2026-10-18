@@ -8,16 +8,27 @@ machines. Keep the four headings.
 
 ### What changed
 
+- (18 Oct) The basket flag is now green, not red: a basket is marked
+  closable when it is in loss and this week's realised profit is more than
+  that loss, so closing it now still leaves the week up (made +1,500, a
+  basket at -1,200: closable, keeps +300). Anything else about a basket
+  marks nothing. `canCloseInProfit()` and `closeReason()` in
+  `src/lib/baskets.js` replace `isDeeperThanWeek()` and `flagReason()`;
+  `accountBaskets()` gives `closable` (and per basket `closable`,
+  `leftover`) in place of `flagged` and `banked`; attention's red
+  `basket-week` reason is now the green `basket-closable` one, and levels
+  run red, amber, green.
 - No alerts of any kind, by the owner's choice: the site highlights what
   needs looking at. `src/lib/attention.js` gives each account its reasons
-  (red: a basket past the week's banked profit, under 2% from stop-out, at
-  margin call, floating drawdown from 10%; amber: under 5% from stop-out,
-  floating drawdown from 5%, stop-out not checked, a position list cut
-  short at 500, offline, EA too old, waiting for a first sync). They show
-  in a Needs attention panel on the overview and project pages (one calm
-  line when nothing is wrong), as tinted rows with reason tags in the
-  accounts table, and as a banner on the account page. Thresholds are
-  `LIMITS` in that file and apply to figures as shown (two decimals).
+  (red: under 2% from stop-out, at margin call, floating drawdown from
+  10%; amber: under 5% from stop-out, floating drawdown from 5%, stop-out
+  not checked, a position list cut short at 500, offline, EA too old,
+  waiting for a first sync; green, from 18 Oct: a basket closable with the
+  week still up). They show in a Needs attention panel on the overview
+  and project pages (one calm line when nothing is wrong), as tinted rows
+  with reason tags in the accounts table, and as a banner on the account
+  page. Thresholds are `LIMITS` in that file and apply to figures as shown
+  (two decimals).
 - Distance to stop-out (`src/lib/risk.js`): per symbol, net lots times the
   point value against the equity above the broker's margin call and
   stop-out, shown in the account page's Margin and stop-out section. The
@@ -60,7 +71,9 @@ risk visible on the site without notifications.
   deals), and flags a basket whose floating loss is more than the week's
   realised profit (any loss, when the week has banked nothing). The
   overview and project pages show a red alert for every flagged basket and
-  a Baskets column. Logic in `src/lib/baskets.js`.
+  a Baskets column. Logic in `src/lib/baskets.js`. (18 Oct: that red flag
+  is gone; a basket is now marked green when it can be closed with the
+  week still up. See the entry above.)
 - The database tracks each basket's life: `baskets`, `basket_results`
   and `sync_open_positions()`, which replaces the snapshot and tracks the
   baskets in one locked step, ignores a sync older than the last snapshot,
@@ -74,7 +87,8 @@ risk visible on the site without notifications.
   keeps the deepest reading in each window, with round axis figures.
 - Trade history and closed baskets show 10 and 5 a page with arrows; the
   accounts table's figures are centred; figures use Oxanium.
-- The demo account was reloaded with grid baskets (gold flagged).
+- The demo account was reloaded with grid baskets (gold flagged; its loss
+  is deeper than the week, so since 18 Oct it is not marked closable).
 
 ### Why
 

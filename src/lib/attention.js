@@ -3,10 +3,11 @@
 // project pages, as highlighted table rows and as a banner on the account.
 //
 // Each reason is { level, code, short, text }: red for a loss or a broker
-// level close enough to act on now, amber for something to keep an eye on.
-// short is a few words for a table chip, text one plain sentence with the
-// figures. Every figure is as of the account's last sync, which the
-// offline reason says when that was long ago.
+// level close enough to act on now, amber for something to keep an eye on,
+// green for a basket in loss that could be closed now with the week still
+// in profit. short is a few words for a table chip, text one plain
+// sentence with the figures. Every figure is as of the account's last
+// sync, which the offline reason says when that was long ago.
 //
 // Pure, so the pages and the tests share it. Everything here ends up on a
 // public page.
@@ -25,7 +26,14 @@ export const LIMITS = Object.freeze({
   stopOutRed: 0.02,
 });
 
-const LEVEL_ORDER = { red: 0, amber: 1 };
+// Worst first. An account's level is its worst reason's, and reasons and
+// the Needs attention panel are sorted in this order.
+export const LEVELS_ORDER = Object.freeze(["red", "amber", "green"]);
+
+function rank(level) {
+  const i = LEVELS_ORDER.indexOf(level);
+  return i === -1 ? LEVELS_ORDER.length : i;
+}
 
 function num(v) {
   if (v === null || v === undefined || v === "") return null;
@@ -92,17 +100,27 @@ function levelText(levels, level, equityAt, currency) {
   return `${number(level, 0)}% margin level, ${money(equityAt, currency)}`;
 }
 
-function basketReason(baskets, currency) {
-  const flagged = Array.isArray(baskets?.flagged) ? baskets.flagged : [];
-  if (!flagged.length) return null;
-  const n = flagged.length;
-  const names = list(flagged.map((b) => `${b.symbol} ${b.side} at ${money(b.floating, currency)}`));
-  const banked = num(baskets.banked) ?? 0;
-  const text =
-    banked > 0
-      ? `${names} ${n === 1 ? "would" : "would each"} lose more than this week's ${money(banked, currency, { sign: true })} banked.`
-      : `${names} ${n === 1 ? "is" : "are"} in loss, and the week has banked nothing (${money(num(baskets.weekRealised) ?? 0, currency, { sign: true })}).`;
-  return { level: "red", code: "basket-week", short: `${plural(n, "basket")} past week profit`, text };
+// Baskets in loss that could be closed now with the week still up
+// (accountBaskets' closable, src/lib/baskets.js). Each is judged against
+// the week on its own, so several are said one by one, with what the week
+// keeps after each, and never as if all could go at once. A basket that is
+// not closable says nothing at all.
+function closableReason(baskets, currency) {
+  const closable = Array.isArray(baskets?.closable) ? baskets.closable : [];
+  if (!closable.length) return null;
+  const n = closable.length;
+  const clauses = closable.map(
+    (b) =>
+      `${b.symbol} ${b.side} at ${money(b.floating, currency)} could be closed now and the week would stay ${money(b.leftover, currency, { sign: true })}`,
+  );
+  const week = money(num(baskets.weekRealised), currency, { sign: true });
+  const of = n === 1 ? `of this week's ${week}` : `each on its own, of this week's ${week}`;
+  return {
+    level: "green",
+    code: "basket-closable",
+    short: `${plural(n, "basket")} closable`,
+    text: `${clauses.join("; ")} (${of}).`,
+  };
 }
 
 function stopOutReason(risk, currency) {
@@ -244,14 +262,14 @@ function eaReason(row) {
 // accountRisk's (src/lib/risk.js); either of the last two may be missing,
 // and then says nothing. An archived account is no longer watched, so it
 // gets no reason; one that has never synced gets only "waiting".
-// level is the worst reason's, null with none; reasons are red first, then
-// in a fixed order, so the banner never shuffles between renders.
+// level is the worst reason's (red over amber over green), null with none;
+// reasons are red, then amber, then green, each in a fixed order, so the
+// banner never shuffles between renders.
 export function accountAttention({ row, baskets, risk, now = Date.now() }) {
   if (!row || row.archived_at) return { level: null, reasons: [] };
   if (!row.last_sync_at) return { level: "amber", reasons: [waitingReason()] };
   const currency = row.currency || "USD";
   const reasons = [
-    basketReason(baskets, currency),
     stopOutReason(risk, currency),
     marginCallReason(risk, currency),
     floatingReason(row, currency),
@@ -259,14 +277,15 @@ export function accountAttention({ row, baskets, risk, now = Date.now() }) {
     partialReason(risk),
     offlineReason(row, now),
     eaReason(row),
+    closableReason(baskets, currency),
   ].filter(Boolean);
   // Array sort is stable, so within a level the order above holds.
-  reasons.sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level]);
+  reasons.sort((a, b) => rank(a.level) - rank(b.level));
   return { level: reasons[0]?.level ?? null, reasons };
 }
 
-// The Needs attention panel: every account with a reason, red before
-// amber, then by label. rows each carry { id, label, currency,
+// The Needs attention panel: every account with a reason, red, then amber,
+// then green, then by label. rows each carry { id, label, currency,
 // last_sync_at } and their accountAttention result as attention.
 export function attentionItems(rows) {
   const items = [];
@@ -283,6 +302,6 @@ export function attentionItems(rows) {
     });
   }
   return items.sort(
-    (a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level] || String(a.label ?? "").localeCompare(String(b.label ?? "")),
+    (a, b) => rank(a.level) - rank(b.level) || String(a.label ?? "").localeCompare(String(b.label ?? "")),
   );
 }

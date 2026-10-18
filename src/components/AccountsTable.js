@@ -1,17 +1,16 @@
 import Link from "next/link";
 import Pnl from "@/components/Pnl";
 import StatusDot from "@/components/StatusDot";
-import WarnIcon from "@/components/WarnIcon";
-import { ReasonIcon, levelStyle } from "@/components/AttentionBanner";
+import { LEVELS, ReasonIcon, levelStyle } from "@/components/AttentionBanner";
 import { floatingDdLevel } from "@/lib/attention";
-import { flagReason } from "@/lib/baskets";
 import { money, pct, ago, number } from "@/lib/format";
 
 // The Baskets cell, from the row's accountBaskets result (src/lib/baskets.js)
 // when the page passed one. A dash when there is nothing to group yet: no
 // sync, or no list of positions from the last one. Stacked, so the column
 // is as narrow as its widest figure: how many are open, the deepest one's
-// floating, and a link to the account's baskets when any is flagged.
+// floating, and, when any could be closed now with the week still in
+// profit, how many, beside a tick, linking to the account's baskets.
 function BasketsCell({ r }) {
   const b = r.baskets;
   if (!b || !["current", "none"].includes(b.state)) {
@@ -21,8 +20,12 @@ function BasketsCell({ r }) {
     return <td className="px-3 py-2.5 text-center text-xs text-muted">None</td>;
   }
   const deepest = b.deepest;
-  const k = b.flagged.length;
-  const detail = b.flagged.map((x) => `${x.symbol} ${x.side} ${money(x.floating, r.currency)}`).join(", ");
+  const closable = Array.isArray(b.closable) ? b.closable : [];
+  const k = closable.length;
+  // Each judged on its own, so each says what the week keeps after it alone.
+  const detail = closable
+    .map((x) => `${x.symbol} ${x.side} at ${money(x.floating, r.currency)}, week stays ${money(x.leftover, r.currency, { sign: true })}`)
+    .join("; ");
   return (
     <td
       className="px-3 py-2.5 text-center"
@@ -35,11 +38,11 @@ function BasketsCell({ r }) {
       {k > 0 && (
         <Link
           href={`/accounts/${r.id}#baskets`}
-          className="mt-0.5 flex items-center justify-center gap-1 text-xs font-medium whitespace-nowrap text-down hover:underline"
-          title={`${flagReason(b, r.currency)}: ${detail}`}
+          className={`mt-0.5 flex items-center justify-center gap-1 text-xs font-medium whitespace-nowrap hover:underline ${LEVELS.green.text}`}
+          title={`Can be closed now and the week stays in profit, each on its own: ${detail}`}
         >
-          <WarnIcon className="h-3.5 w-3.5" />
-          {k} flagged
+          <ReasonIcon level="green" className="h-3.5 w-3.5" />
+          {number(k, 0)} closable
         </Link>
       )}
     </td>
@@ -55,7 +58,7 @@ function ReasonChips({ attention }) {
   const reasons = attention?.reasons ?? [];
   if (!reasons.length) return null;
   return (
-    <ul className="mt-1.5 flex flex-wrap gap-1" aria-label="Needs attention">
+    <ul className="mt-1.5 flex flex-wrap gap-1" aria-label={attention?.level === "green" ? "Can close in profit" : "Needs attention"}>
       {reasons.map((reason) => (
         <li
           key={reason.code}
@@ -84,8 +87,9 @@ export default function AccountsTable({ rows }) {
   // Eleven columns share the 1246px page width, so the cells are padded
   // less than other tables' and the headers wrap. Every figure sits in the
   // middle of its column, under its heading; the account stays on the left.
-  // A row that needs attention is tinted by its worst level, with a bar
-  // down its left edge, and says why under the account's name.
+  // A row with any attention reason is tinted by its worst level (red,
+  // amber, or green for a basket that could be closed in profit), with a
+  // bar down its left edge, and says why under the account's name.
   return (
     <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
       <table className="w-full min-w-[900px] text-sm">
@@ -95,7 +99,7 @@ export default function AccountsTable({ rows }) {
             <th className="px-3 py-2.5 text-center font-medium">Balance</th>
             <th className="px-3 py-2.5 text-center font-medium">Equity</th>
             <th className="px-3 py-2.5 text-center font-medium" title="Equity below balance right now">Floating DD</th>
-            <th className="px-3 py-2.5 text-center font-medium" title="Open baskets (one symbol, one direction), the deepest one's floating P&L, and how many are flagged: losing more than the week has banked">
+            <th className="px-3 py-2.5 text-center font-medium" title="Open baskets (one symbol, one direction), the deepest one's floating P&L, and how many could be closed now with this week's realised profit still above zero">
               Baskets
             </th>
             <th className="px-3 py-2.5 text-center font-medium" title="Largest fall in equity since tracking began">Max DD</th>

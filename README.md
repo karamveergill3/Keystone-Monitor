@@ -71,10 +71,14 @@ Anyone with the link       --->                                       account_po
   closed). A tracking failure is undone on its own and logged in the
   database; the snapshot is still stored and the sync still succeeds. Like
   the account's max drawdown, a dip between two syncs is not seen.
-- **A basket is flagged** when it is in loss by more than this week's
-  realised profit (closed trades since Monday, London, deposits and
-  withdrawals excluded): closing it now would give back more than the week
-  has banked. In a flat or losing week, any basket in loss is flagged.
+- **A basket is marked closable, in green,** when it is in loss and this
+  week's realised profit (closed trades since Monday, London, deposits and
+  withdrawals excluded) is more than that loss: closing it now would still
+  leave the week up. A week of +1,500 and a basket at -1,200 is closable,
+  keeping +300. Each basket is judged against the week on its own, to the
+  cent as shown; a loss that would take the week to zero or below, a basket
+  in profit, a flat or losing week and an archived account mark nothing at
+  all. Logic in `src/lib/baskets.js` (`canCloseInProfit`).
 - **One key per account.** Made on the admin screen, shown once, stored only
   as a SHA-256. The first sync binds the key to that login and server; the
   same key from a different login is refused.
@@ -100,7 +104,7 @@ Anyone with the link       --->                                       account_po
 | Floating drawdown | How far equity is below balance right now. |
 | Open positions, margin | As the terminal reported them at its last sync. Margin level is MT5's own figure, equity over margin. |
 | Basket drawdown | How far a basket's floating P&L (profit + swap of its positions) is below zero, in the account's currency and as a share of balance. Its worst is the lowest seen at any sync while it was open. |
-| Flagged basket | A basket whose floating loss is bigger than this week's realised trading P&L (or any loss, when the week is flat or down). |
+| Closable basket | A basket in loss whose floating loss is smaller than this week's realised trading P&L, so closing it now leaves the week up; what it would keep is shown. Nothing else about a basket is flagged. |
 | Max drawdown (account) | Largest fall in equity from its peak, sampled at every sync since the account was first connected. Deposits and withdrawals move the peak, so taking money out is not a drawdown. Broker credit is excluded. |
 | Max drawdown (reports) | Largest day-end fall of the gain index within the report's dates. |
 | Totals | Added up per currency. Accounts in different currencies are never summed together. |

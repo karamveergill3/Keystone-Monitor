@@ -4,11 +4,11 @@ import {
   basketKey,
   positionIdOf,
   groupBaskets,
-  isDeeperThanWeek,
+  canCloseInProfit,
   accountBaskets,
   shortDuration,
   closedBasket,
-  flagReason,
+  closeReason,
   priceDecimals,
 } from "@/lib/baskets";
 
@@ -147,97 +147,157 @@ test("the current price is the newest position's", () => {
   assert.equal(b.currentPrice, 2640);
 });
 
-test("a basket is flagged when it is deeper than the week's realised profit", () => {
-  // Deeper than the week, by a cent.
-  assert.equal(isDeeperThanWeek(-400.01, 400), true);
-  // Equal is not flagged, also when float noise sits below the cent.
-  assert.equal(isDeeperThanWeek(-400, 400), false);
-  assert.equal(isDeeperThanWeek(-400, 400.000000001), false);
-  assert.equal(isDeeperThanWeek(-400, 399.999999999), false);
-  assert.equal(isDeeperThanWeek(-399.99, 400), false);
-  // A flat or losing week has banked nothing: any loss is deeper.
-  assert.equal(isDeeperThanWeek(-0.01, 0), true);
-  assert.equal(isDeeperThanWeek(-0.01, -250), true);
-  // A basket in profit, or at zero, never is.
-  assert.equal(isDeeperThanWeek(0, -250), false);
-  assert.equal(isDeeperThanWeek(25, -250), false);
-  assert.equal(isDeeperThanWeek(25, 0), false);
-  // An unknown week counts as nothing banked; an unknown basket is never flagged.
-  assert.equal(isDeeperThanWeek(-1, null), true);
-  assert.equal(isDeeperThanWeek(-1, NaN), true);
-  assert.equal(isDeeperThanWeek("-500", "400"), true);
-  assert.equal(isDeeperThanWeek(NaN, 0), false);
-  assert.equal(isDeeperThanWeek(-Infinity, 0), false);
-  assert.equal(isDeeperThanWeek(null, 0), false);
+test("a basket is closable when closing it now still leaves the week in profit", () => {
+  // The owner's example: the week made 1,500, the basket floats -1,200, so
+  // closing it keeps 300.
+  assert.equal(canCloseInProfit(-1200, 1500), true);
+  // Closing it would take the week to exactly zero, or below: not closable.
+  assert.equal(canCloseInProfit(-1500, 1500), false);
+  assert.equal(canCloseInProfit(-1500.01, 1500), false);
+  assert.equal(canCloseInProfit(-1499.99, 1500), true);
+  // A week that is flat or down has nothing to close a loss against.
+  assert.equal(canCloseInProfit(-0.01, 0), false);
+  assert.equal(canCloseInProfit(-10, -250), false);
+  // A basket at zero or in profit has no drawdown to close.
+  assert.equal(canCloseInProfit(0, 1500), false);
+  assert.equal(canCloseInProfit(25, 1500), false);
+  assert.equal(canCloseInProfit(25, -250), false);
+  // Both figures as shown, to the cent: float noise never decides it.
+  assert.equal(canCloseInProfit(-400, 400.000000001), false);
+  assert.equal(canCloseInProfit(-400, 400.004), false);
+  assert.equal(canCloseInProfit(-400, 400.006), true);
+  assert.equal(canCloseInProfit(-399.996, 400), false);
+  assert.equal(canCloseInProfit(-0.004, 400), false);
+  assert.equal(canCloseInProfit(-0.1, 0.30000000000000004), true);
+  assert.equal(canCloseInProfit(-0.2, 0.1 + 0.1), false);
+  // Numeric strings, as Postgres hands numerics over.
+  assert.equal(canCloseInProfit("-1200", "1500"), true);
+  assert.equal(canCloseInProfit("-1500", "1500"), false);
+  // Unknown or non-finite figures are never closable.
+  assert.equal(canCloseInProfit(NaN, 1500), false);
+  assert.equal(canCloseInProfit(-1, NaN), false);
+  assert.equal(canCloseInProfit(-1, null), false);
+  assert.equal(canCloseInProfit(-1, undefined), false);
+  assert.equal(canCloseInProfit(null, 1500), false);
+  assert.equal(canCloseInProfit("", 1500), false);
+  assert.equal(canCloseInProfit("abc", 1500), false);
+  assert.equal(canCloseInProfit(-Infinity, 1500), false);
+  assert.equal(canCloseInProfit(-1, Infinity), false);
 });
 
-test("an account's baskets carry the flag, drawdown and the deepest", () => {
+test("an account's baskets carry closable, leftover, drawdown and the deepest", () => {
   const v = accountBaskets({ rows: grid(), account: account({ open_positions: 4 }), weekRealised: 50 });
   assert.equal(v.state, "current");
   assert.equal(v.reported, 4);
   assert.equal(v.listed, 4);
   assert.equal(v.open, 2);
   assert.equal(v.weekRealised, 50);
-  assert.equal(v.banked, 50);
   assert.equal(v.lastSyncAt, SYNC);
   assert.equal(v.archived, false);
   assert.equal(v.deepest.key, "EURUSD|sell");
+  assert.equal("flagged" in v, false);
+  assert.equal("banked" in v, false);
 
   const [eur, gold] = v.baskets;
   assert.equal(eur.floating, -85);
   assert.equal(eur.drawdown, 85);
   assert.equal(eur.drawdownPct, 0.0085);
-  assert.equal(eur.flagged, true);
+  // -85 against a week of +50: closing it would leave the week down.
+  assert.equal(eur.closable, false);
+  assert.equal(eur.leftover, null);
+  // -2.50 against +50: closing it keeps +47.50.
   assert.equal(gold.drawdown, 2.5);
-  assert.equal(gold.flagged, false);
-  assert.deepEqual(v.flagged.map((b) => b.key), ["EURUSD|sell"]);
+  assert.equal(gold.closable, true);
+  assert.equal(gold.leftover, 47.5);
+  assert.ok(v.baskets.every((b) => !("flagged" in b)));
+  assert.deepEqual(v.closable.map((b) => b.key), ["XAUUSD|buy"]);
 
-  // A basket in profit has no drawdown.
-  const up = accountBaskets({ rows: [position({ profit: 30 })], account: account(), weekRealised: 0 });
+  // A basket in profit has no drawdown and is never closable.
+  const up = accountBaskets({ rows: [position({ profit: 30 })], account: account(), weekRealised: 500 });
   assert.equal(up.baskets[0].drawdown, 0);
   assert.equal(up.baskets[0].drawdownPct, 0);
-  assert.equal(up.flagged.length, 0);
+  assert.equal(up.baskets[0].closable, false);
+  assert.equal(up.baskets[0].leftover, null);
+  assert.equal(up.closable.length, 0);
   assert.equal(up.deepest.floating, 30);
 });
 
-test("a week that is down flags every basket in loss", () => {
-  const v = accountBaskets({ rows: grid(), account: account(), weekRealised: -120 });
-  assert.deepEqual(v.flagged.map((b) => b.key), ["EURUSD|sell", "XAUUSD|buy"]);
-  // What the flag was measured against is nothing, not the loss.
-  assert.equal(v.weekRealised, -120);
-  assert.equal(v.banked, 0);
-  const unknown = accountBaskets({ rows: grid(), account: account(), weekRealised: undefined });
-  assert.equal(unknown.weekRealised, 0);
-  assert.equal(unknown.banked, 0);
-  // Banked is to the cent, like the comparison.
-  assert.equal(accountBaskets({ rows: grid(), account: account(), weekRealised: "84.996" }).banked, 85);
+test("the owner's example: 1,500 made, a basket at -1,200, closing it keeps 300", () => {
+  const v = accountBaskets({ rows: [position({ profit: -1200 })], account: account({ open_positions: 1 }), weekRealised: 1500 });
+  assert.equal(v.baskets[0].closable, true);
+  assert.equal(v.baskets[0].leftover, 300);
+  assert.equal(v.closable.length, 1);
+
+  // Exactly the week, or deeper: no flag of any kind.
+  for (const profit of [-1500, -1500.01, -2000]) {
+    const deep = accountBaskets({ rows: [position({ profit })], account: account({ open_positions: 1 }), weekRealised: 1500 });
+    assert.equal(deep.baskets[0].closable, false, `profit ${profit}`);
+    assert.equal(deep.baskets[0].leftover, null, `profit ${profit}`);
+    assert.deepEqual(deep.closable, [], `profit ${profit}`);
+  }
 });
 
-test("a flag says what the week banked, never a loss as the threshold", () => {
-  const up = accountBaskets({ rows: grid(), account: account(), weekRealised: 50 });
-  assert.equal(flagReason(up, "USD"), "Deeper than this week's +$50.00 banked");
+test("each basket is judged against the week on its own, deepest loss first", () => {
+  // A week of +100: EURUSD (-85) keeps 15, gold (-2.50) keeps 97.50.
+  // Closing both would keep 12.50, but each is said on its own.
+  const v = accountBaskets({ rows: grid(), account: account(), weekRealised: 100 });
+  assert.deepEqual(v.closable.map((b) => [b.key, b.floating, b.leftover]), [["EURUSD|sell", -85, 15], ["XAUUSD|buy", -2.5, 97.5]]);
+  assert.ok(v.baskets.every((b) => b.closable));
 
-  const down = accountBaskets({ rows: grid(), account: account(), weekRealised: -300 });
-  assert.equal(flagReason(down, "USD"), "In loss, and the week has banked nothing (-$300.00)");
-  assert.doesNotMatch(flagReason(down, "USD"), /Deeper/);
+  // Two baskets that each fit in the week, though not both together.
+  const rows = [
+    position({ ticket: "1", symbol: "XAUUSD", side: "buy", profit: -300 }),
+    position({ ticket: "2", symbol: "EURUSD", side: "sell", profit: -400 }),
+    position({ ticket: "3", symbol: "GBPUSD", side: "buy", profit: 40 }),
+    position({ ticket: "4", symbol: "USDJPY", side: "sell", profit: -600 }),
+  ];
+  const w = accountBaskets({ rows, account: account({ open_positions: 4 }), weekRealised: 500 });
+  assert.deepEqual(w.closable.map((b) => [b.key, b.leftover]), [["EURUSD|sell", 100], ["XAUUSD|buy", 200]]);
+  const jpy = w.baskets.find((b) => b.key === "USDJPY|sell");
+  assert.equal(jpy.closable, false);
+  assert.equal(jpy.leftover, null);
 
-  const flat = accountBaskets({ rows: grid(), account: account(), weekRealised: 0 });
-  assert.equal(flagReason(flat, "EUR"), "In loss, and the week has banked nothing (€0.00)");
-
-  // From the two figures alone, as anything carrying them can pass.
-  assert.equal(flagReason({ banked: 1234.5, weekRealised: 1234.5 }, "GBP"), "Deeper than this week's +£1,234.50 banked");
-  assert.equal(flagReason({ banked: undefined, weekRealised: undefined }, "USD"), "In loss, and the week has banked nothing ($0.00)");
+  // The week is taken to the cent, as is what it keeps.
+  const c = accountBaskets({ rows: [position({ profit: -0.1 })], account: account({ open_positions: 1 }), weekRealised: "0.30000000000000004" });
+  assert.equal(c.weekRealised, 0.3);
+  assert.equal(c.baskets[0].leftover, 0.2);
 });
 
-test("an archived account lists its baskets but flags none", () => {
+test("a week that is flat, down or unknown has nothing closable", () => {
+  for (const weekRealised of [0, -120, undefined, null, "", "abc", NaN]) {
+    const v = accountBaskets({ rows: grid(), account: account(), weekRealised });
+    assert.deepEqual(v.closable, [], `week ${weekRealised}`);
+    assert.ok(v.baskets.every((b) => b.closable === false && b.leftover === null), `week ${weekRealised}`);
+  }
+  assert.equal(accountBaskets({ rows: grid(), account: account(), weekRealised: -120 }).weekRealised, -120);
+  assert.equal(accountBaskets({ rows: grid(), account: account(), weekRealised: undefined }).weekRealised, 0);
+  assert.equal(accountBaskets({ rows: grid(), account: account(), weekRealised: "84.996" }).weekRealised, 85);
+});
+
+test("a closable basket says what the week keeps; any other says nothing", () => {
+  const v = accountBaskets({ rows: grid(), account: account(), weekRealised: 100 });
+  assert.equal(closeReason(v.closable[0], "USD"), "Close now and the week stays +$15.00");
+  assert.equal(closeReason(v.closable[1], "EUR"), "Close now and the week stays +€97.50");
+  assert.equal(closeReason({ closable: true, leftover: 401.18 }, "USD"), "Close now and the week stays +$401.18");
+  assert.equal(closeReason({ closable: true, leftover: 1234.5 }, "GBP"), "Close now and the week stays +£1,234.50");
+
+  const deep = accountBaskets({ rows: grid(), account: account(), weekRealised: 50 });
+  assert.equal(closeReason(deep.baskets[0], "USD"), null);
+  assert.equal(closeReason({ closable: false, leftover: null }, "USD"), null);
+  assert.equal(closeReason({ closable: true, leftover: null }, "USD"), null);
+  assert.equal(closeReason(null, "USD"), null);
+  assert.equal(closeReason(undefined, "USD"), null);
+});
+
+test("an archived account lists its baskets but has nothing closable", () => {
   const archived = account({ archived_at: "2026-10-10T00:00:00+00:00" });
-  const v = accountBaskets({ rows: grid(), account: archived, weekRealised: -120 });
+  const v = accountBaskets({ rows: grid(), account: archived, weekRealised: 1500 });
   assert.equal(v.archived, true);
   assert.equal(v.open, 2);
   assert.equal(v.deepest.key, "EURUSD|sell");
   assert.equal(v.baskets[0].drawdown, 85);
-  assert.deepEqual(v.flagged, []);
-  assert.ok(v.baskets.every((b) => b.flagged === false));
+  assert.deepEqual(v.closable, []);
+  assert.ok(v.baskets.every((b) => b.closable === false && b.leftover === null));
 });
 
 test("figures are as of the last sync, however long ago it was", () => {
@@ -251,23 +311,27 @@ test("figures are as of the last sync, however long ago it was", () => {
   assert.equal(accountBaskets({ rows: [], account: undefined, weekRealised: 0 }).lastSyncAt, null);
 });
 
-test("rows an earlier sync left behind make no baskets", () => {
+test("rows an earlier sync left behind make no baskets, and nothing closable", () => {
+  // A week of +1,500 would make every stale basket closable if it counted.
   const stale = grid().map((p) => ({ ...p, updated_at: EARLIER }));
-  const old = accountBaskets({ rows: stale, account: account({ ea_version: "2026.10.17" }), weekRealised: 0 });
+  const old = accountBaskets({ rows: stale, account: account({ ea_version: "2026.10.17" }), weekRealised: 1500 });
   assert.equal(old.state, "unreported");
   assert.deepEqual(old.baskets, []);
+  assert.deepEqual(old.closable, []);
   assert.equal(old.deepest, null);
   assert.equal(old.open, 0);
 
-  const pending = accountBaskets({ rows: stale, account: account(), weekRealised: 0 });
+  const pending = accountBaskets({ rows: stale, account: account(), weekRealised: 1500 });
   assert.equal(pending.state, "pending");
   assert.equal(pending.open, 0);
+  assert.deepEqual(pending.closable, []);
 
   // Only the rows from the last sync count when both are present.
-  const mixed = accountBaskets({ rows: [...stale, position({ ticket: "9", profit: -7 })], account: account(), weekRealised: 0 });
+  const mixed = accountBaskets({ rows: [...stale, position({ ticket: "9", profit: -7 })], account: account({ open_positions: 1 }), weekRealised: 1500 });
   assert.equal(mixed.open, 1);
   assert.equal(mixed.baskets[0].positions, 1);
   assert.equal(mixed.baskets[0].floating, -7);
+  assert.deepEqual(mixed.closable.map((b) => [b.positions, b.leftover]), [[1, 1493]]);
 
   assert.equal(accountBaskets({ rows: grid(), account: account({ last_sync_at: null }), weekRealised: 0 }).state, "waiting");
   assert.equal(accountBaskets({ rows: [], account: account({ open_positions: 0 }), weekRealised: 0 }).state, "none");
@@ -369,3 +433,15 @@ test("a closed basket closes at its last closing deal, or the sync that saw it g
   assert.equal(closedBasket({ ...row, worst_floating: 12 }).worstDrawdown, 0);
 });
 
+
+test("nothing is closable while the EA's list is cut short", () => {
+  // 1 position listed of 650 open: the basket may be far deeper than -1,200.
+  const cut = accountBaskets({ rows: [position({ profit: -1200 })], account: account({ open_positions: 650 }), weekRealised: 1500 });
+  assert.equal(cut.listed, 1);
+  assert.deepEqual(cut.closable, []);
+  assert.equal(cut.baskets[0].closable, false);
+  assert.equal(cut.baskets[0].leftover, null);
+  // The same basket with the whole book listed is closable.
+  const whole = accountBaskets({ rows: [position({ profit: -1200 })], account: account({ open_positions: 1 }), weekRealised: 1500 });
+  assert.equal(whole.closable.length, 1);
+});

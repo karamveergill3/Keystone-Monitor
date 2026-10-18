@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LIMITS, accountAttention, attentionItems, distanceLabel, floatingDdLevel, stopOutLevel } from "@/lib/attention";
+import { LEVELS_ORDER, LIMITS, accountAttention, attentionItems, distanceLabel, floatingDdLevel, stopOutLevel } from "@/lib/attention";
+import { accountBaskets } from "@/lib/baskets";
 import { accountRisk } from "@/lib/risk";
 
 const NOW = Date.parse("2026-10-17T12:05:00Z");
@@ -58,40 +59,83 @@ function codes(a) {
   return a.reasons.map((r) => `${r.level}:${r.code}`);
 }
 
-test("the limits are the agreed ones", () => {
+// accountBaskets' result as attention reads it, with one closable basket.
+function closableBaskets(overrides = {}) {
+  return {
+    weekRealised: 496.78,
+    closable: [{ symbol: "EURUSD", side: "sell", floating: -95.6, leftover: 401.18, closable: true }],
+    ...overrides,
+  };
+}
+
+// One open basket at floating, from real position rows, against a week.
+function realBaskets(floating, weekRealised) {
+  const position = {
+    ticket: "1", position_id: "1", symbol: "XAUUSD", side: "buy", volume: 1, open_price: 2650, current_price: 2638,
+    sl: 0, tp: 0, swap: 0, profit: floating, open_time: "2026-10-17T08:00:00Z", magic: 1, updated_at: SYNC,
+  };
+  return accountBaskets({
+    rows: [position],
+    account: { last_sync_at: SYNC, open_positions: 1, ea_version: "2026.10.17.5", balance: 10_000 },
+    weekRealised,
+  });
+}
+
+test("the limits are the agreed ones; levels run red, amber, green", () => {
   assert.deepEqual({ ...LIMITS }, { floatingDdAmber: 0.05, floatingDdRed: 0.1, stopOutAmber: 0.05, stopOutRed: 0.02 });
+  assert.deepEqual([...LEVELS_ORDER], ["red", "amber", "green"]);
+  assert.ok(Object.isFrozen(LEVELS_ORDER));
 });
 
 test("nothing wrong, nothing to say", () => {
-  const a = accountAttention({ row: row(), baskets: { flagged: [] }, risk: riskAt(0.2), now: NOW });
+  const a = accountAttention({ row: row(), baskets: { weekRealised: 500, closable: [] }, risk: riskAt(0.2), now: NOW });
   assert.deepEqual(a, { level: null, reasons: [] });
   assert.deepEqual(accountAttention({ row: row(), now: NOW }), { level: null, reasons: [] });
 });
 
-test("baskets past the week's profit: one red reason for all of them", () => {
-  const baskets = {
-    banked: 500,
-    weekRealised: 500,
-    flagged: [
-      { symbol: "XAUUSD", side: "buy", floating: -1_200 },
-      { symbol: "EURUSD", side: "sell", floating: -650 },
-    ],
-  };
-  const a = accountAttention({ row: row(), baskets, now: NOW });
-  assert.equal(a.level, "red");
-  assert.equal(a.reasons.length, 1);
+test("a basket that could be closed with the week still up: one green reason", () => {
+  const a = accountAttention({ row: row(), baskets: closableBaskets(), now: NOW });
+  assert.equal(a.level, "green");
+  assert.deepEqual(codes(a), ["green:basket-closable"]);
   const r = a.reasons[0];
-  assert.equal(r.code, "basket-week");
-  assert.equal(r.short, "2 baskets past week profit");
-  assert.equal(r.text, "XAUUSD buy at -$1,200.00 and EURUSD sell at -$650.00 would each lose more than this week's +$500.00 banked.");
+  assert.equal(r.short, "1 basket closable");
+  assert.equal(r.text, "EURUSD sell at -$95.60 could be closed now and the week would stay +$401.18 (of this week's +$496.78).");
 
-  const one = accountAttention({
+  // Several: one clause each, each judged on its own against the week.
+  const several = accountAttention({
     row: row({ currency: "GBP" }),
-    baskets: { banked: 0, weekRealised: -50, flagged: [{ symbol: "XAUUSD", side: "buy", floating: -10 }] },
+    baskets: {
+      weekRealised: 500,
+      closable: [
+        { symbol: "EURUSD", side: "sell", floating: -400, leftover: 100, closable: true },
+        { symbol: "XAUUSD", side: "buy", floating: -300, leftover: 200, closable: true },
+      ],
+    },
     now: NOW,
   });
-  assert.equal(one.reasons[0].short, "1 basket past week profit");
-  assert.equal(one.reasons[0].text, "XAUUSD buy at -£10.00 is in loss, and the week has banked nothing (-£50.00).");
+  assert.deepEqual(codes(several), ["green:basket-closable"]);
+  assert.equal(several.reasons[0].short, "2 baskets closable");
+  assert.equal(
+    several.reasons[0].text,
+    "EURUSD sell at -£400.00 could be closed now and the week would stay +£100.00; XAUUSD buy at -£300.00 could be closed now and the week would stay +£200.00 (each on its own, of this week's +£500.00).",
+  );
+});
+
+test("from real baskets: green only when closing still leaves the week up", () => {
+  // The owner's example: 1,500 made, a basket at -1,200, closing it keeps 300.
+  const a = accountAttention({ row: row(), baskets: realBaskets(-1200, 1500), now: NOW });
+  assert.equal(a.level, "green");
+  assert.equal(a.reasons[0].text, "XAUUSD buy at -$1,200.00 could be closed now and the week would stay +$300.00 (of this week's +$1,500.00).");
+
+  // A basket as deep as the week, deeper, in profit, or a week flat or down:
+  // no reason of any kind, no level.
+  for (const [floating, week] of [[-1500, 1500], [-1500.01, 1500], [-1600, 1500], [40, 1500], [-10, 0], [-10, -250]]) {
+    assert.deepEqual(
+      accountAttention({ row: row(), baskets: realBaskets(floating, week), now: NOW }),
+      { level: null, reasons: [] },
+      `floating ${floating}, week ${week}`,
+    );
+  }
 });
 
 test("stop-out: red under 2%, amber under 5%, nothing from 5%", () => {
@@ -230,7 +274,7 @@ test("an EA that does not list open positions: amber", () => {
 
 test("archived accounts get no reasons; never-synced ones only 'waiting'", () => {
   const bad = { row: row({ floatingDd: 0.5, status: "offline", ea_version: "1" }), risk: riskAt(0, { equity: 400 }), now: NOW };
-  bad.baskets = { banked: 0, weekRealised: 0, flagged: [{ symbol: "XAUUSD", side: "buy", floating: -1 }] };
+  bad.baskets = closableBaskets();
   assert.equal(accountAttention(bad).reasons.length, 6);
   assert.deepEqual(accountAttention({ ...bad, row: { ...bad.row, archived_at: "2026-10-01T00:00:00Z" } }), { level: null, reasons: [] });
   const waiting = accountAttention({ ...bad, row: { ...bad.row, last_sync_at: null, status: "waiting" } });
@@ -239,18 +283,37 @@ test("archived accounts get no reasons; never-synced ones only 'waiting'", () =>
   assert.deepEqual(accountAttention({ row: null }), { level: null, reasons: [] });
 });
 
-test("red reasons come first, then the fixed order", () => {
+test("red reasons come first, then amber, then green, each in the fixed order", () => {
   const a = accountAttention({
     row: row({ floatingDd: 0.06, status: "offline", last_sync_at: "2026-10-17T11:00:00Z", ea_version: "2026.10.17.5" }),
-    baskets: { banked: 0, weekRealised: 0, flagged: [{ symbol: "XAUUSD", side: "buy", floating: -1 }] },
+    baskets: closableBaskets(),
     risk: riskAt(0.03, { equity: 900 }),
     now: NOW,
   });
   assert.equal(a.level, "red");
-  assert.deepEqual(codes(a), ["red:basket-week", "red:margin-call", "amber:stop-out", "amber:floating-dd", "amber:offline"]);
+  assert.deepEqual(codes(a), ["red:margin-call", "amber:stop-out", "amber:floating-dd", "amber:offline", "green:basket-closable"]);
 
   const amber = accountAttention({ row: row({ floatingDd: 0.06 }), now: NOW });
   assert.equal(amber.level, "amber");
+});
+
+test("an account's level is its worst reason's: red over amber over green", () => {
+  const at = (overrides, risk) => accountAttention({ row: row(overrides), baskets: closableBaskets(), risk, now: NOW });
+  const green = at({});
+  assert.equal(green.level, "green");
+  assert.deepEqual(codes(green), ["green:basket-closable"]);
+
+  const amber = at({ floatingDd: 0.06 });
+  assert.equal(amber.level, "amber");
+  assert.deepEqual(codes(amber), ["amber:floating-dd", "green:basket-closable"]);
+
+  const red = at({ floatingDd: 0.12 });
+  assert.equal(red.level, "red");
+  assert.deepEqual(codes(red), ["red:floating-dd", "green:basket-closable"]);
+
+  const all = at({ floatingDd: 0.06 }, riskAt(0.01));
+  assert.equal(all.level, "red");
+  assert.deepEqual(codes(all), ["red:stop-out", "amber:floating-dd", "green:basket-closable"]);
 });
 
 test("works from a real accountRisk: the worked example is nowhere near", () => {
@@ -261,19 +324,30 @@ test("works from a real accountRisk: the worked example is nowhere near", () => 
   assert.deepEqual(accountAttention({ row: row(), risk, now: NOW }).reasons, []);
 });
 
-test("attention items: red before amber, then by label, none without a level", () => {
+test("attention items: red, then amber, then green, then by label, none without a level", () => {
   const red = { level: "red", reasons: [{ level: "red", code: "floating-dd" }] };
   const amber = { level: "amber", reasons: [{ level: "amber", code: "offline" }] };
+  const green = { level: "green", reasons: [{ level: "green", code: "basket-closable" }] };
   const items = attentionItems([
     { id: "1", label: "Bravo", currency: "USD", last_sync_at: SYNC, attention: amber },
+    { id: "7", label: "Able", currency: "USD", last_sync_at: SYNC, attention: green },
     { id: "2", label: "Delta", currency: "GBP", last_sync_at: SYNC, attention: red },
     { id: "3", label: "Alpha", currency: "USD", last_sync_at: SYNC, attention: amber },
+    { id: "8", label: "Zulu", currency: "EUR", last_sync_at: SYNC, attention: green },
     { id: "4", label: "Charlie", currency: "USD", last_sync_at: SYNC, attention: red },
     { id: "5", label: "Echo", currency: "USD", last_sync_at: SYNC, attention: { level: null, reasons: [] } },
     { id: "6", label: "Foxtrot", currency: "USD", last_sync_at: SYNC },
     null,
   ]);
-  assert.deepEqual(items.map((i) => i.label), ["Charlie", "Delta", "Alpha", "Bravo"]);
+  assert.deepEqual(items.map((i) => [i.level, i.label]), [
+    ["red", "Charlie"],
+    ["red", "Delta"],
+    ["amber", "Alpha"],
+    ["amber", "Bravo"],
+    ["green", "Able"],
+    ["green", "Zulu"],
+  ]);
   assert.deepEqual(items[1], { accountId: "2", label: "Delta", currency: "GBP", lastSyncAt: SYNC, level: "red", reasons: red.reasons });
+  assert.deepEqual(items[5], { accountId: "8", label: "Zulu", currency: "EUR", lastSyncAt: SYNC, level: "green", reasons: green.reasons });
   assert.deepEqual(attentionItems(null), []);
 });

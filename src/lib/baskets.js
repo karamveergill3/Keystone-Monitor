@@ -1,6 +1,6 @@
 // Grid baskets: what a mean-reversion grid EA has open on an account,
-// grouped the way its risk builds up, and whether any of it would give
-// back more than the week has banked.
+// grouped the way its risk builds up, and which baskets in loss could be
+// closed now with the week still in profit.
 //
 // A basket is every open position on one account with the same symbol and
 // the same side. Magic numbers are ignored on purpose: some grid EAs give
@@ -174,17 +174,21 @@ export function groupBaskets(rows) {
   return [...groups.entries()].map(([key, g]) => summarise(key, g.symbol, g.side, g.rows)).sort(deepestFirst);
 }
 
-// Whether closing a basket now would lose more than the account has
-// realised this week. A week that is flat or down has banked nothing, so
-// any basket in loss is deeper than it. Both sides are compared in cents,
-// as shown, so a loss equal to the week on screen is never flagged.
-export function isDeeperThanWeek(floating, weekRealised) {
+// Whether a basket in loss could be closed now and the week still be up:
+// this week's realised profit is positive and more than the basket's loss.
+// The week made 1,500 and the basket floats -1,200: closing it keeps 300,
+// so it is closable. A basket in profit has no drawdown to close, a week
+// that is flat or down has nothing to absorb one, and a loss that would
+// take the week to exactly zero or below is not closable. Both figures are
+// compared in cents, as shown, so what the screen says always agrees.
+// An unknown or non-finite figure is never closable.
+export function canCloseInProfit(floating, weekRealised) {
   const f = num(floating);
-  if (f === null) return false;
   const w = num(weekRealised);
-  const banked = Math.max(0, w === null ? 0 : cents(w));
-  const loss = -cents(f);
-  return loss > 0 && loss > banked;
+  if (f === null || w === null) return false;
+  const loss = cents(f);
+  const week = cents(w);
+  return loss < 0 && week > 0 && cents(week + loss) > 0;
 }
 
 // Tracked open baskets by key. track_baskets() keeps one open row per key;
@@ -217,13 +221,24 @@ function share(amount, of) {
 // "current" means the rows are the last sync's list, not that the last sync
 // was recent: an account that has stopped syncing keeps its last list. So
 // every figure here is as of lastSyncAt, and an archived account, whose
-// EA is no longer watched, has nothing flagged (its baskets still list).
+// EA is no longer watched, has nothing closable (its baskets still list).
+//
+// weekRealised is the week's realised trading P&L (accountRow's
+// periods.week.pnl, since Monday 00:00 London). Each basket is judged
+// against it on its own: two closable baskets may not both be closable
+// together. leftover is what the week would keep after closing that
+// basket, null when it is not closable.
 export function accountBaskets({ rows, account, weekRealised, tracked = [] }) {
   const snap = openSnapshot(rows, account);
   const week = num(weekRealised) === null ? 0 : cents(num(weekRealised));
   const archived = Boolean(account?.archived_at);
   const balance = num(account?.balance);
   const byKey = trackedByKey(tracked);
+
+  // The EA lists at most 500 positions. When the terminal has more, a
+  // basket may be deeper than the list shows, so nothing is marked
+  // closable until the whole book is in view.
+  const complete = snap.state === "current" && snap.reported <= snap.rows.length;
 
   const baskets = groupBaskets(snap.state === "current" ? snap.rows : []).map((g) => {
     const t = byKey.get(g.key);
@@ -235,11 +250,13 @@ export function accountBaskets({ rows, account, weekRealised, tracked = [] }) {
     const tOpened = instant(t?.opened_at);
     const gOpened = instant(g.openedAt);
     const opened = tOpened === null ? gOpened : gOpened === null ? tOpened : Math.min(tOpened, gOpened);
+    const closable = !archived && complete && canCloseInProfit(g.floating, week);
     return {
       ...g,
       drawdown,
       drawdownPct: share(drawdown, balance),
-      flagged: !archived && isDeeperThanWeek(g.floating, week),
+      closable,
+      leftover: closable ? cents(week + g.floating) : null,
       worstFloating,
       worstDrawdown,
       // null is now: no sync has seen it deeper than it is.
@@ -261,11 +278,9 @@ export function accountBaskets({ rows, account, weekRealised, tracked = [] }) {
     lastSyncAt: account?.last_sync_at ?? null,
     archived,
     weekRealised: week,
-    // What a basket's loss is measured against: a week that is flat or
-    // down has banked nothing.
-    banked: Math.max(0, week),
     baskets,
-    flagged: baskets.filter((b) => b.flagged),
+    // Deepest loss first, as the baskets are.
+    closable: baskets.filter((b) => b.closable),
     deepest: baskets[0] ?? null,
     open: baskets.length,
   };
@@ -304,10 +319,11 @@ export function closedBasket(row) {
   };
 }
 
-// Why a basket is flagged, in words, from an accountBaskets result: what
-// the week has banked, or that it has banked nothing (and what it stands
-// at), so a week in loss is never shown as the threshold.
-export function flagReason({ banked, weekRealised }, currency) {
-  if (num(banked) > 0) return `Deeper than this week's ${money(banked, currency, { sign: true })} banked`;
-  return `In loss, and the week has banked nothing (${money(num(weekRealised) ?? 0, currency, { sign: true })})`;
+// Why a basket is marked closable, in words, from one of accountBaskets'
+// baskets: what the week keeps if it is closed now. null for a basket that
+// is not closable, which says nothing.
+export function closeReason(basket, currency) {
+  const leftover = num(basket?.leftover);
+  if (!basket?.closable || leftover === null) return null;
+  return `Close now and the week stays ${money(leftover, currency, { sign: true })}`;
 }

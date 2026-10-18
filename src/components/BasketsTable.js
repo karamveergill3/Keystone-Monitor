@@ -1,6 +1,6 @@
 import Pnl from "@/components/Pnl";
-import WarnIcon from "@/components/WarnIcon";
-import { flagReason } from "@/lib/baskets";
+import { LEVELS, ReasonIcon } from "@/components/AttentionBanner";
+import { closeReason } from "@/lib/baskets";
 import { ago, londonTime, money, number, pct } from "@/lib/format";
 
 const EMPTY = "rounded-lg border border-line bg-panel p-6 text-sm text-muted";
@@ -29,39 +29,38 @@ function worstTitle(b) {
   return `The lowest floating seen at any sync since ${londonTime(b.trackedSince)}`;
 }
 
-// The banner over the table: how many are flagged and against what. When
-// the week has banked something, a flagged basket would give all of it
-// back and more; when it has banked nothing, any basket in loss is flagged,
-// and the week's own figure is only context, never the threshold.
-function flaggedBanner(view, currency) {
-  const n = view.flagged.length;
-  const them = n === 1 ? "it" : "them";
-  if (view.banked > 0) {
-    return [
-      `${count(n, "basket", "baskets")} deeper than this week's ${money(view.banked, currency, { sign: true })} banked`,
-      `: closing ${them} now would give back more than the week has realised.`,
-    ];
-  }
+// The banner over the table: how many baskets could be closed now with the
+// week still in profit, and the week's figure they are measured against.
+// Each is judged on its own, so the words never suggest closing them all
+// at once would keep the week up.
+function closableBanner(n, weekRealised, currency) {
+  const week = money(weekRealised, currency, { sign: true });
   return [
-    `${count(n, "basket", "baskets")} in loss, and the week has banked nothing (${money(view.weekRealised, currency, { sign: true })})`,
-    ": with nothing banked, every basket in loss counts.",
+    n === 1
+      ? "1 basket can be closed and the week stays in profit"
+      : `${count(n, "basket", "baskets")} can each be closed on its own with the week still in profit`,
+    n === 1
+      ? `: its floating loss is less than this week's ${week} realised profit.`
+      : `: each one's floating loss, taken on its own, is less than this week's ${week} realised profit.`,
   ];
 }
 
 // Each open basket (one symbol, one direction) on the account, deepest
-// first, from accountBaskets in src/lib/baskets.js. A basket whose floating
-// loss is more than the week has banked is marked by an icon and words as
-// well as its colour. Every figure is as of the last sync, which the
-// summary line says, since an account that stops syncing keeps its last
-// list.
+// first, from accountBaskets in src/lib/baskets.js. A basket in loss that
+// could be closed now with the week's realised profit still above zero is
+// tinted green and says so in words beside a tick, with what the week
+// would keep; every other basket is plain. Every figure is as of the last
+// sync, which the summary line says, since an account that stops syncing
+// keeps its last list.
 export default function BasketsTable({ view, currency }) {
   if (!view || !["current", "none"].includes(view.state)) {
     return <p className={EMPTY}>{emptyText(view ?? { state: "waiting" })}</p>;
   }
 
-  const { baskets, flagged, deepest, weekRealised } = view;
-  const reason = flagReason(view, currency);
-  const [bannerHead, bannerTail] = flaggedBanner(view, currency);
+  const { baskets, deepest, weekRealised } = view;
+  const closable = Array.isArray(view.closable) ? view.closable : [];
+  const green = LEVELS.green;
+  const [bannerHead, bannerTail] = closableBanner(closable.length, weekRealised, currency);
 
   return (
     <div className="space-y-2">
@@ -77,12 +76,14 @@ export default function BasketsTable({ view, currency }) {
         {view.lastSyncAt && (
           <span title={londonTime(view.lastSyncAt)}>{` · as of last sync ${ago(view.lastSyncAt)}`}</span>
         )}
-        {view.archived && " · archived, so nothing is flagged"}
+        {view.archived && " · archived, so nothing is marked"}
       </p>
 
-      {flagged.length > 0 && (
-        <p className="flex items-start gap-2 rounded-md border border-down/40 bg-down-soft px-3 py-2 text-sm text-down">
-          <WarnIcon className="mt-1 h-4 w-4" />
+      {closable.length > 0 && (
+        <p className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${green.box} ${green.text}`}>
+          <span className="mt-1 inline-flex">
+            <ReasonIcon level="green" />
+          </span>
           <span>
             <span className="font-semibold">{bannerHead}</span>
             {bannerTail}
@@ -114,19 +115,21 @@ export default function BasketsTable({ view, currency }) {
             </thead>
             <tbody>
               {baskets.map((b) => (
-                <tr key={b.key} className={`border-b border-line/70 last:border-0 ${b.flagged ? "bg-down-soft" : ""}`}>
+                <tr key={b.key} className={`border-b border-line/70 last:border-0 ${b.closable ? "bg-up-soft" : ""}`}>
                   {/* The edge marker sits on the cell: a row's own box-shadow
                       does not paint in a collapsed table. */}
                   <td
-                    className={`px-4 py-2.5 ${b.flagged ? "shadow-[inset_3px_0_0_var(--color-down)]" : ""}`}
+                    className={`px-4 py-2.5 ${b.closable ? green.edge : ""}`}
                     title={b.magics.length ? `Magic ${b.magics.join(", ")}` : undefined}
                   >
                     <span className="font-medium text-ink">{b.symbol}</span>{" "}
                     <span className={sideClass(b.side)}>{b.side}</span>
-                    {b.flagged && (
-                      <span className="mt-0.5 flex items-start gap-1 text-xs font-medium text-down">
-                        <WarnIcon className="mt-0.5 h-3.5 w-3.5" />
-                        {reason}
+                    {b.closable && (
+                      <span className={`mt-0.5 flex items-start gap-1 text-xs font-medium ${green.text}`}>
+                        <span className="mt-0.5 inline-flex">
+                          <ReasonIcon level="green" className="h-3.5 w-3.5" />
+                        </span>
+                        {closeReason(b, currency)}
                       </span>
                     )}
                   </td>
@@ -162,8 +165,9 @@ export default function BasketsTable({ view, currency }) {
       <p className="text-xs text-muted">
         {view.reported > view.listed &&
           `Built from the ${number(view.listed, 0)} positions the EA listed, of ${number(view.reported, 0)} open on the terminal. `}
-        A basket is every open position on one symbol in one direction. Worst readings are taken at each sync, about
-        every 2 minutes, since tracking began.
+        A basket is every open position on one symbol in one direction. One in loss is marked with a tick when closing
+        it now, on its own, would still leave this week&apos;s realised profit above zero. Worst readings are taken at
+        each sync, about every 2 minutes, since tracking began.
       </p>
     </div>
   );
