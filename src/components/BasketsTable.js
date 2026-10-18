@@ -1,8 +1,5 @@
 import Pnl from "@/components/Pnl";
 import WarnIcon from "@/components/WarnIcon";
-import { ReasonIcon, distanceLevel, levelStyle } from "@/components/AttentionBanner";
-import { distanceLabel } from "@/lib/attention";
-import { BROKER_LEVELS_EA } from "@/lib/openPositions";
 import { flagReason } from "@/lib/baskets";
 import { ago, londonTime, money, number, pct } from "@/lib/format";
 
@@ -51,72 +48,19 @@ function flaggedBanner(view, currency) {
   ];
 }
 
-// The To stop-out cell: for the basket's symbol (its accountRisk entry in
-// src/lib/risk.js), the move as a share of its price that would take equity
-// to the broker's stop-out, and the price that is. The move is the
-// symbol's, against its net position, which is not always this basket's
-// side: a sell basket on a symbol that is net long gets there by a fall.
-// Coloured on the same LIMITS as the attention reasons, with an icon.
-function StopOutCell({ s, levels }) {
-  if (s?.hedged) {
-    return (
-      <td className="px-4 py-2.5 text-right text-muted" title="Buys and sells on this symbol net to flat, so a move in it alone does not take equity to stop-out">
-        hedged
-      </td>
-    );
-  }
-  const d = s?.stopOut;
-  if (!d) {
-    const why = !levels
-      ? `The EA has not reported the broker's stop-out level yet (it does from ${BROKER_LEVELS_EA})`
-      : "Unknown: no margin in use, or no point value for this symbol";
-    return (
-      <td className="px-4 py-2.5 text-right text-muted" title={why}>
-        -
-      </td>
-    );
-  }
-  const level = d.move === 0 ? "red" : distanceLevel(d.pct);
-  const tone = level ? levelStyle(level) : null;
-  const direction = s.netLots > 0 ? "falls to" : "rises to";
-  return (
-    <td className={`px-4 py-2.5 text-right ${tone ? tone.cell : ""}`}>
-      <span className="flex items-center justify-end gap-1.5">
-        {tone && <ReasonIcon level={level} className="h-3.5 w-3.5" />}
-        <span className={d.move === 0 ? "font-medium" : "num"}>{d.move === 0 ? "Reached" : distanceLabel(d.pct)}</span>
-      </span>
-      {d.move > 0 && (
-        <span className={`block text-xs whitespace-nowrap ${tone ? "" : "text-muted"}`}>
-          {d.price === null ? (
-            "no price gets there"
-          ) : (
-            <>
-              {direction} <span className="num">{number(d.price, s.decimals)}</span>
-            </>
-          )}
-        </span>
-      )}
-    </td>
-  );
-}
-
 // Each open basket (one symbol, one direction) on the account, deepest
 // first, from accountBaskets in src/lib/baskets.js. A basket whose floating
 // loss is more than the week has banked is marked by an icon and words as
 // well as its colour. Every figure is as of the last sync, which the
 // summary line says, since an account that stops syncing keeps its last
 // list.
-//
-// risk, when given, is the account's accountRisk result (src/lib/risk.js)
-// and adds how far each basket's symbol is from stop-out.
-export default function BasketsTable({ view, currency, risk }) {
+export default function BasketsTable({ view, currency }) {
   if (!view || !["current", "none"].includes(view.state)) {
     return <p className={EMPTY}>{emptyText(view ?? { state: "waiting" })}</p>;
   }
 
   const { baskets, flagged, deepest, weekRealised } = view;
   const reason = flagReason(view, currency);
-  const bySymbol = new Map((risk?.symbols ?? []).map((s) => [s.symbol, s]));
   const [bannerHead, bannerTail] = flaggedBanner(view, currency);
 
   return (
@@ -150,7 +94,7 @@ export default function BasketsTable({ view, currency, risk }) {
         <p className={EMPTY}>No open baskets.</p>
       ) : (
         <div className="relative overflow-x-auto rounded-lg border border-line bg-panel">
-          <table className={`w-full text-sm ${risk ? "min-w-[1140px]" : "min-w-[1040px]"}`}>
+          <table className="w-full min-w-[1040px] text-sm">
             <thead className="bg-panel-2/70 text-xs tracking-wider text-muted uppercase">
               <tr className="border-b border-line">
                 <th className="px-4 py-2.5 text-left font-medium">Basket</th>
@@ -162,14 +106,6 @@ export default function BasketsTable({ view, currency, risk }) {
                 <th className="px-4 py-2.5 text-right font-medium">Current</th>
                 <th className="px-4 py-2.5 text-right font-medium" title="Profit plus swap of every position in the basket">Floating</th>
                 <th className="px-4 py-2.5 text-right font-medium" title="Floating loss as a share of the balance">Drawdown</th>
-                {risk && (
-                  <th
-                    className="px-4 py-2.5 text-right font-medium whitespace-nowrap"
-                    title="The move in this symbol, alone, that would take equity to the broker's stop-out, as a share of its price, and the price that would be. Everything else is taken to stay where it is."
-                  >
-                    To stop-out
-                  </th>
-                )}
                 <th className="px-4 py-2.5 text-right font-medium" title="The lowest floating seen at any sync, its share of the balance then, and when">
                   Worst so far
                 </th>
@@ -200,7 +136,6 @@ export default function BasketsTable({ view, currency, risk }) {
                   <td className="num px-4 py-2.5 text-right">{b.currentPrice === null ? "-" : number(b.currentPrice, b.decimals)}</td>
                   <td className="px-4 py-2.5 text-right"><Pnl value={b.floating} currency={currency} /></td>
                   <td className={`num px-4 py-2.5 text-right ${b.drawdown > 0 ? "" : "text-muted"}`}>{pct(b.drawdownPct)}</td>
-                  {risk && <StopOutCell s={bySymbol.get(b.symbol)} levels={risk.levels} />}
                   <td className="px-4 py-2.5 text-right" title={worstTitle(b)}>
                     <span className={`num block ${b.worstFloating < 0 ? "text-down" : "text-muted"}`}>
                       {money(b.worstFloating, currency, { sign: true })}
@@ -229,8 +164,6 @@ export default function BasketsTable({ view, currency, risk }) {
           `Built from the ${number(view.listed, 0)} positions the EA listed, of ${number(view.reported, 0)} open on the terminal. `}
         A basket is every open position on one symbol in one direction. Worst readings are taken at each sync, about
         every 2 minutes, since tracking began.
-        {risk &&
-          " To stop-out is for the basket's symbol as a whole, all its buys and sells, moving alone; Margin and stop-out has the detail."}
       </p>
     </div>
   );

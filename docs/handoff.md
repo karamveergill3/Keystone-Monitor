@@ -20,8 +20,9 @@ machines. Keep the four headings.
   `LIMITS` in that file and apply to figures as shown (two decimals).
 - Distance to stop-out (`src/lib/risk.js`): per symbol, net lots times the
   point value against the equity above the broker's margin call and
-  stop-out. The account page has a Margin and stop-out section, and the
-  Open baskets table a To stop-out column.
+  stop-out, shown in the account page's Margin and stop-out section. The
+  Open baskets table had a To stop-out column too; the owner had it taken
+  out (18 Oct).
 - EA 2026.10.17.5 sends the broker's levels (ACCOUNT_MARGIN_SO_MODE,
   _SO_CALL, _SO_SO) and each position's point value (tick value on loss /
   tick size). Stored as accounts.stop_out_mode, margin_call_level,

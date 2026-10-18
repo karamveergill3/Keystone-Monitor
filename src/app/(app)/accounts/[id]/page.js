@@ -145,7 +145,7 @@ export default async function AccountPage({ params, searchParams }) {
 
       <section id="baskets" className="space-y-3">
         <h2 className="text-base font-semibold">Open baskets</h2>
-        <BasketsTable view={baskets} currency={c} risk={risk} />
+        <BasketsTable view={baskets} currency={c} />
       </section>
 
       <section id="risk" className="space-y-3">
