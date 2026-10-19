@@ -118,7 +118,7 @@ export default async function AccountPage({ params, searchParams }) {
         <StatTile label="Gain, all time" sub="Time-weighted, like Myfxbook's Gain">
           <span className={all.gain >= 0 ? "text-up" : "text-down"}>{pct(all.gain, { sign: true })}</span>
         </StatTile>
-        <StatTile label="Trading P&L, all time" sub={`Deposits ${money(all.deposits, c)} · withdrawals ${money(all.withdrawals, c)}`}>
+        <StatTile label="Trading P&L, all time">
           <Pnl value={all.tradePnl} currency={c} />
         </StatTile>
         <StatTile label="This month" sub={`Today ${money(row.periods.today.pnl, c, { sign: true })} · week ${money(row.periods.week.pnl, c, { sign: true })}`}>
