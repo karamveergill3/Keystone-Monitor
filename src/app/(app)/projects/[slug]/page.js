@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import AccountsTable from "@/components/AccountsTable";
-import CurrencyTotals from "@/components/CurrencyTotals";
+import AccountCards from "@/components/AccountCards";
+import ProjectTotals from "@/components/ProjectTotals";
 import AttentionPanel from "@/components/AttentionPanel";
 import MonthlyMatrix from "@/components/MonthlyMatrix";
 import ReportForm from "@/components/ReportForm";
@@ -48,10 +49,10 @@ export default async function ProjectPage({ params }) {
     <div className="space-y-8">
       <div>
         <h1 className="flex items-center gap-2.5 text-xl font-semibold"><span className={`h-3 w-3 rounded-full ${projectTint(project.sort).dot}`} />{project.name}</h1>
-        <p className="text-sm text-muted">{accounts.length} {accounts.length === 1 ? "account" : "accounts"}</p>
+        <ProjectTotals totals={currencyTotals(rows)} />
       </div>
       <AttentionPanel items={attentionItems(rows)} checked={rows.length} />
-      <CurrencyTotals totals={currencyTotals(rows)} tint={projectTint(project.sort).tint} />
+      <AccountCards rows={rows} tint={projectTint(project.sort).tint} />
       <AccountsTable rows={rows} />
       <section className="space-y-3">
         <h2 className="text-base font-semibold">By month</h2>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import AccountsTable from "@/components/AccountsTable";
-import CurrencyTotals from "@/components/CurrencyTotals";
+import AccountCards from "@/components/AccountCards";
+import ProjectTotals from "@/components/ProjectTotals";
 import AttentionPanel from "@/components/AttentionPanel";
 import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor, openPositionsFor, openBasketsFor } from "@/lib/data";
@@ -42,13 +43,14 @@ export default async function OverviewPage() {
         const projectRows = rows.filter((r) => r.project_id === p.id);
         return (
           <section key={p.id} className="space-y-3">
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-x-4">
               <h2 className="flex items-center gap-2 text-lg font-semibold"><span className={`h-2.5 w-2.5 rounded-full ${projectTint(p.sort).dot}`} />{p.name}</h2>
               <Link href={`/projects/${p.slug}`} className="text-sm text-accent hover:underline">
                 Monthly breakdown and reports
               </Link>
             </div>
-            <CurrencyTotals totals={currencyTotals(projectRows)} tint={projectTint(p.sort).tint} />
+            <ProjectTotals totals={currencyTotals(projectRows)} />
+            <AccountCards rows={projectRows} tint={projectTint(p.sort).tint} />
             <AccountsTable rows={projectRows} />
           </section>
         );
