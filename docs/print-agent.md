@@ -2,9 +2,10 @@
 
 An admin can print on the office printer:
 
-- a **fleet summary** (every account, the per-currency totals, and the
-  baskets that could be closed with the week still up) from the site's
-  header: **Print fleet summary**, beside **Leave admin**;
+- a **fleet summary** (one portrait page: each algorithm's accounts,
+  trades and realised profit, the fleet's cumulative realised profit and
+  nine headline figures, in the currency most live accounts use) from the
+  site's header: **Print fleet summary**, beside **Leave admin**;
 - a **project or account report** from the report box on its page:
   **Print**, beside **Download PDF**, with the dates picked there.
 

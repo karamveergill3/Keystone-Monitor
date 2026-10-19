@@ -4,6 +4,44 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
+## 2026-10-19 (Claude Code, Mac): Fleet summary redesigned as a one-page overview
+
+### What changed
+
+- `/api/reports/fleet` (and **Print fleet summary**) is now one portrait A4
+  page laid out like the owner's sample: masthead, Purpose, How it works
+  (each algorithm's accounts, trades, realised profit and win rate), the
+  fleet's cumulative realised profit, nine headline figures and a Fleet
+  performance panel saying how they were worked out. It replaces the
+  landscape per-account table; the closable-basket list is no longer
+  printed (it is still on the overview).
+- New figures: `fleetReportModel` in `src/lib/reportModel.js`;
+  `pooledReturns` in `src/lib/accountStats.js` (several accounts chained
+  as one, time-weighted). Floating drawdown comes from two new read-only
+  SQL functions in schema section 4, `floating_worst` and
+  `equity_sample_gaps` (service role only), via `floatingHistoryFor` in
+  `src/lib/data.js`.
+- The page always fits one sheet: text is measured first, optional lines
+  are dropped in a set order, and the chart takes the height left.
+- Reviewed by a multi-agent pass; its eight confirmed findings were fixed
+  (pooled return made time-weighted, drawdown coverage stated per account,
+  overflow, empty chart axis, masthead alignment, docs).
+
+### State
+
+- Committed and pushed; the two SQL functions are applied to the live
+  database (applied before the push: the route calls them).
+
+### Next
+
+- Optional: a page 2 with the per-account table, if the office wants it.
+
+### Watch out for
+
+- Equity samples only began on 19 Oct (tracking restarted), so the
+  drawdown record is short for now; the page says so.
+
+---
 ## 2026-10-19 (Claude Code, Mac): Algorithms on the admin page; office printing
 
 ### What changed

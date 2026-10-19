@@ -187,3 +187,21 @@ export async function equitySamples(supabase, accountId, days) {
       .range(from, to)
   );
 }
+
+// The fleet summary's floating drawdown record (schema.sql, section 4):
+// worst is Map(accountId -> { worstPct, firstAt }), worstPct a negative
+// share of balance or 0; gaps are each account's stretches of over three
+// days (a weekend is not one) with no sample, the last up to now if it has
+// gone quiet.
+export async function floatingHistoryFor(supabase, accountIds) {
+  const worst = new Map();
+  if (!accountIds.length) return { worst, gaps: [] };
+  const [w, g] = await Promise.all([
+    supabase.rpc("floating_worst", { p_account_ids: accountIds }),
+    supabase.rpc("equity_sample_gaps", { p_account_ids: accountIds, p_longer_than: "3 days" }),
+  ]);
+  if (w.error) throw new Error(`floating drawdown read failed: ${w.error.message}`);
+  if (g.error) throw new Error(`equity sample gaps read failed: ${g.error.message}`);
+  for (const r of w.data ?? []) worst.set(r.account_id, { worstPct: Number(r.worst_pct), firstAt: r.first_at });
+  return { worst, gaps: (g.data ?? []).map((r) => ({ accountId: r.account_id, from: r.gap_from, to: r.gap_to })) };
+}

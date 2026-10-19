@@ -14,7 +14,9 @@
 --     has checked the terminal's key, and the admin screen's actions after
 --     they have checked the admin password. The functions that write
 --     (sync_open_positions, track_baskets, admin_attempt, claim_print_job,
---     finish_print_job) can be run by the service role only (section 10).
+--     finish_print_job), and the two the fleet summary reads through
+--     (floating_worst, equity_sample_gaps), can be run by the service role
+--     only (section 10).
 --   * Sync keys and print agent keys are stored only as SHA-256 hashes, in
 --     their own tables.
 --   * The admin sign-in's lockout lives here (section 7), so guesses at a
@@ -191,6 +193,50 @@ alter table public.equity_samples enable row level security;
 
 -- No policies (see projects above).
 drop policy if exists "members read equity samples" on public.equity_samples;
+
+-- What the fleet summary's floating drawdown reads (src/lib/data.js,
+-- floatingHistoryFor). floating_worst: each account's worst open-trade
+-- loss as a share of its balance across every sample, credit taken off
+-- equity first as everywhere else, and when its samples begin.
+-- equity_sample_gaps: each account's stretches longer than p_longer_than
+-- with no sample, the last one running to now when it has gone quiet, so
+-- the summary can say what the record does not cover. Read only. Service
+-- role only (see section 10). If the arguments or columns ever change,
+-- drop the old signature first.
+create or replace function public.floating_worst(p_account_ids uuid[])
+returns table (account_id uuid, worst_pct numeric, first_at timestamptz)
+language sql
+stable
+set search_path = ''
+as $$
+  select s.account_id,
+         least(0, min((s.equity - s.credit - s.balance) / s.balance)) as worst_pct,
+         min(s.at) as first_at
+    from public.equity_samples s
+   where s.account_id = any(p_account_ids) and s.balance > 0
+   group by s.account_id;
+$$;
+
+create or replace function public.equity_sample_gaps(p_account_ids uuid[], p_longer_than interval)
+returns table (account_id uuid, gap_from timestamptz, gap_to timestamptz)
+language sql
+stable
+set search_path = ''
+as $$
+  select g.account_id, g.prev_at as gap_from, g.at as gap_to
+    from (select s.account_id, s.at,
+                 lag(s.at) over (partition by s.account_id order by s.at) as prev_at
+            from public.equity_samples s
+           where s.account_id = any(p_account_ids)) g
+   where g.at - g.prev_at > p_longer_than
+  union all
+  select s.account_id, max(s.at), now()
+    from public.equity_samples s
+   where s.account_id = any(p_account_ids)
+   group by s.account_id
+  having now() - max(s.at) > p_longer_than
+   order by gap_from;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 5. Open positions: what each terminal has open right now.
@@ -856,7 +902,8 @@ revoke all on public.projects, public.accounts, public.account_keys,
   from anon, authenticated;
 
 -- Postgres lets everyone run a new function, and Supabase grants the
--- browser roles every function in public by default. These write, so only
+-- browser roles every function in public by default. Most of these write,
+-- and the two that read return what the tables behind them hold, so only
 -- the server may call them.
 revoke all on function public.track_baskets(uuid, timestamptz, numeric, boolean)
   from public, anon, authenticated;
@@ -873,6 +920,12 @@ grant execute on function public.claim_print_job(text, text, text, text) to serv
 revoke all on function public.finish_print_job(text, bigint, boolean, text)
   from public, anon, authenticated;
 grant execute on function public.finish_print_job(text, bigint, boolean, text) to service_role;
+revoke all on function public.floating_worst(uuid[])
+  from public, anon, authenticated;
+grant execute on function public.floating_worst(uuid[]) to service_role;
+revoke all on function public.equity_sample_gaps(uuid[], interval)
+  from public, anon, authenticated;
+grant execute on function public.equity_sample_gaps(uuid[], interval) to service_role;
 
 -- ---------------------------------------------------------------------------
 -- 11. Leftovers. A fresh database never has them; a re-run removes them from

@@ -134,6 +134,10 @@ Anyone with the link       --->                                       account_po
 | Max drawdown (account) | Largest fall in equity from its peak, sampled at every sync since the account was first connected. Deposits and withdrawals move the peak, so taking money out is not a drawdown. Broker credit is excluded. |
 | Max drawdown (reports) | Largest day-end fall of the gain index within the report's dates. |
 | Totals | Added up per currency. Accounts in different currencies are never summed together. |
+| Combined return (fleet summary) | Each account's Gain added together. |
+| Pooled return (fleet summary) | Every account's days as if they were one account's: each day's P&L over the balance all of them started it with, chained like Gain. Idle money counts. |
+| Avg max floating drawdown (fleet summary) | Each account's worst open-trade loss as a share of its balance, from its 15-minute equity samples (or what is open now, if deeper), averaged. The page says when the record starts and where it has gaps. |
+| Fleet summary currency | The currency most live accounts use. Accounts in any other are left out, and the page says how many. |
 
 Past balances are walked back from today's balance, so the figures stay
 right even if a terminal only ever sent part of its history.

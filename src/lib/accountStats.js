@@ -70,6 +70,33 @@ export function chainGain(returns) {
   return index - 1;
 }
 
+// Several accounts as if they were one: each day's P&L over the balance
+// all of them started that day with, ready for chainGain. An account
+// counts from its first day; on a day it has no row, its balance carries
+// over from the day before, so idle money still dilutes the return. For
+// one account it gives exactly that account's own returns. accounts is
+// [{ daily, balance }], daily as normaliseDaily returns it.
+export function pooledReturns(accounts) {
+  const series = accounts.map(({ daily, balance }) => dailyReturns(daily ?? [], balance)).filter((r) => r.length);
+  const days = [...new Set(series.flatMap((rs) => rs.map((r) => r.day)))].sort();
+  const at = series.map(() => 0);
+  return days.map((day) => {
+    let tradePnl = 0;
+    let base = 0;
+    series.forEach((rs, k) => {
+      while (at[k] < rs.length && rs[at[k]].day < day) at[k]++;
+      const r = rs[at[k]];
+      if (r && r.day === day) {
+        tradePnl += r.tradePnl;
+        base += r.startBalance + r.deposits;
+      } else if (at[k] > 0) {
+        base += rs[at[k] - 1].endBalance;
+      }
+    });
+    return { day, tradePnl, ret: base > 0 ? tradePnl / base : 0 };
+  });
+}
+
 // Largest fall of the gain index from its own high, day end to day end.
 // Built on returns rather than balances so withdrawals do not count.
 export function maxDailyDrawdown(returns) {

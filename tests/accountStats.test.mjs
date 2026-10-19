@@ -9,6 +9,8 @@ import {
   balanceAtStart,
   balanceAtEnd,
   maxDailyDrawdown,
+  pooledReturns,
+  chainGain,
 } from "@/lib/accountStats";
 
 const close = (a, b) => Math.abs(a - b) < 1e-9;
@@ -98,4 +100,24 @@ test("an account that never synced has no balance figures", () => {
   const s = summarise(rows, null);
   assert.equal(s.startBalance, null);
   assert.equal(s.gain, 0);
+});
+
+test("pooled returns: one account alone is its own gain; idle money dilutes, withdrawn profit does not inflate", () => {
+  const day = (d, trade_pnl, cash_flow = 0, extra = {}) => ({ account_id: "x", day: d, trade_pnl, cash_flow, closed: 1, wins: trade_pnl > 0 ? 1 : 0, losses: trade_pnl > 0 ? 0 : 1, gross_profit: Math.max(0, trade_pnl), gross_loss: Math.min(0, trade_pnl), lots: 0.1, ...extra });
+  // Deposit 100k, make 50k, withdraw 50k: +50%, not the +100% a simple
+  // profit over net money in would say.
+  const a = normaliseDaily([day("2026-09-01", 0, 100_000, { deposits: 100_000, withdrawals: 0 }), day("2026-09-02", 50_000), day("2026-09-03", 0, -50_000, { deposits: 0, withdrawals: -50_000 })]);
+  const own = summarise(a, 100_000).gain;
+  assert.ok(Math.abs(own - 0.5) < 1e-9);
+  assert.ok(Math.abs(chainGain(pooledReturns([{ daily: a, balance: 100_000 }])) - own) < 1e-12);
+
+  // A second account funded with 100k on day one that never trades: the
+  // pool made 50k on 200k that day, so +25%.
+  const idle = normaliseDaily([day("2026-09-01", 0, 100_000, { deposits: 100_000, withdrawals: 0, closed: 0 })]);
+  const pool = pooledReturns([{ daily: a, balance: 100_000 }, { daily: idle, balance: 100_000 }]);
+  assert.deepEqual(pool.map((r) => r.day), ["2026-09-01", "2026-09-02", "2026-09-03"]);
+  assert.ok(Math.abs(chainGain(pool) - 0.25) < 1e-12);
+  // No accounts, or none with a balance: nothing to pool.
+  assert.deepEqual(pooledReturns([]), []);
+  assert.deepEqual(pooledReturns([{ daily: a, balance: null }]), []);
 });
