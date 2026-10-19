@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import CopyField from "@/components/CopyField";
-import { copyText } from "@/components/copyText";
 import { EA_PATH, canPersonalise, personaliseEa, eaFileName } from "@/lib/eaFile";
 import { buttonClass } from "@/lib/ui";
 
@@ -11,7 +10,6 @@ import { buttonClass } from "@/lib/ui";
 export default function KeyReveal({ state }) {
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
   if (!state?.ok || !state.key) return null;
 
   const origin = new URL(state.syncUrl).origin;
@@ -23,22 +21,13 @@ export default function KeyReveal({ state }) {
     return personaliseEa(await res.text(), { syncUrl: state.syncUrl, syncKey: state.key });
   }
 
-  async function copyCode() {
-    setError("");
-    try {
-      if (!(await copyText(await personalised()))) throw new Error("This browser would not copy");
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      setError(`${err.message.replace(/\.$/, "")}. Use the download, or the two values under "Setting it up by hand".`);
-    }
-  }
-
   async function download() {
     setError("");
     try {
       const text = await personalised();
-      const url = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+      // Not text/plain: some browsers add ".txt" to a text download, and the
+      // file must stay a .mq5 that MetaEditor opens as it is.
+      const url = URL.createObjectURL(new Blob([text], { type: "application/octet-stream" }));
       const a = document.createElement("a");
       a.href = url;
       a.download = eaFileName(state.label);
@@ -51,7 +40,7 @@ export default function KeyReveal({ state }) {
   }
 
   return (
-    <div className="mt-4 space-y-4 rounded-lg border border-warn/30 bg-warn-soft p-4 text-sm">
+    <div className="mt-4 space-y-4 rounded-lg border border-line bg-panel-2 p-4 text-sm">
       <div>
         <p className="font-semibold">Connect {state.label} to its MT5 terminal</p>
         <p className="text-xs text-muted">This key is shown only now. Lost it? Make a new key and download again.</p>
@@ -61,32 +50,27 @@ export default function KeyReveal({ state }) {
         <li>
           {ready ? (
             <>
-              <span className="flex flex-wrap gap-2">
-                <button type="button" onClick={copyCode} className={buttonClass}>
-                  {copied ? "Copied" : "Copy the code for MetaEditor"}
-                </button>
-                <button type="button" onClick={download} className={buttonClass}>
-                  Download the EA for {state.label}
-                </button>
-              </span>
+              <button type="button" onClick={download} className={buttonClass}>
+                Download the EA for {state.label}
+              </button>
               <span className="mt-1 block text-xs text-muted">
-                {saved ? `Saved as ${eaFileName(state.label)}. ` : ""}Either way, this account&apos;s SyncUrl and SyncKey are already in it.
+                {saved ? `Saved as ${eaFileName(state.label)}. ` : ""}A ready-made .mq5 file with this account&apos;s SyncUrl and
+                SyncKey already in it. You can send it on as it is to whoever runs the terminal.
               </span>
               {error && <span className="mt-1 block text-xs text-down">{error}</span>}
             </>
           ) : (
-            <span>Download the EA from the top of this page and paste the two values under &quot;Setting it up by hand&quot;.</span>
+            <span>
+              <a href={EA_PATH} download className="text-accent hover:underline">Download the blank EA</a> and type in the two values
+              under &quot;Setting it up by hand&quot; when you attach it.
+            </span>
           )}
         </li>
         <li>
-          <span className="font-medium">Copied the code:</span> in MetaTrader 5 press F4 to open MetaEditor, then{" "}
-          <span className="font-medium">File, New, Expert Advisor (template)</span>, name it <span className="font-mono">KeystoneSync</span>, Next until
-          Finish. Select everything in the new file (Ctrl+A), paste (Ctrl+V) and press <span className="font-medium">Compile</span> (F7).
-          <span className="mt-1 block">
-            <span className="font-medium">Downloaded the file:</span> <span className="font-medium">File, Open Data Folder</span>, then{" "}
-            <span className="font-mono">MQL5/Experts</span>; put it there, then right-click <span className="font-medium">Expert Advisors</span> in the
-            Navigator and choose <span className="font-medium">Refresh</span>.
-          </span>
+          In MetaTrader 5: <span className="font-medium">File, Open Data Folder</span>, then <span className="font-mono">MQL5/Experts</span>, and
+          put the file there. Press F4 to open MetaEditor, find the file under <span className="font-medium">Experts</span>, double-click it and
+          press <span className="font-medium">Compile</span> (F7). Back in MetaTrader, right-click <span className="font-medium">Expert Advisors</span> in
+          the Navigator and choose <span className="font-medium">Refresh</span>.
         </li>
         <li>
           <span className="font-medium">Tools, Options, Expert Advisors</span>: tick &quot;Allow WebRequest for listed URL&quot; and add this address:

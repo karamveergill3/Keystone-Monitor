@@ -72,6 +72,13 @@ function ClosableChip({ attention }) {
   );
 }
 
+// What the open trades are worth right now: equity less balance, with any
+// broker credit taken out of equity first, to the cent.
+function floatingMoney(r) {
+  const v = Number(r.equity) - Number(r.balance) - Number(r.credit ?? 0);
+  return Number.isFinite(v) ? Math.round(v * 100) / 100 : 0;
+}
+
 export default function AccountsTable({ rows }) {
   if (!rows.length) {
     return <p className="rounded-lg border border-line bg-panel p-6 text-sm text-muted">No accounts yet.</p>;
@@ -128,7 +135,13 @@ export default function AccountsTable({ rows }) {
                   <>
                     <td className="num px-3 py-2.5 text-center">{money(r.balance, r.currency)}</td>
                     <td className="num px-3 py-2.5 text-center">{money(r.equity, r.currency)}</td>
-                    <td className="num px-3 py-2.5 text-center">{pct(r.floatingDd)}</td>
+                    <td className="px-3 py-2.5 text-center">
+                      <span className="num block">{pct(r.floatingDd)}</span>
+                      {/* The money behind the percentage: equity less balance, broker credit out, as the percentage takes it. */}
+                      <span className="block text-xs">
+                        <Pnl value={floatingMoney(r)} currency={r.currency} />
+                      </span>
+                    </td>
                     <BasketsCell r={r} />
                     <td className="num px-3 py-2.5 text-center">{pct(r.maxDd)}</td>
                     <td className="px-3 py-2.5 text-center"><Pnl value={r.periods.today.pnl} currency={r.currency} gain={r.periods.today.gain} /></td>

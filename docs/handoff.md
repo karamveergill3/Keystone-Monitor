@@ -8,18 +8,35 @@ machines. Keep the four headings.
 
 ### What changed
 
+- (19 Oct) The admin page is a calm list: an "Add an account" card (name
+  and a V100 / Cycle Method choice), then each project's accounts as rows
+  (status, name, login, last sync, EA) with one "Manage" panel each:
+  rename or move, Make/New key, resync history, archive, and delete for
+  one that never synced. Archived accounts fold away at the bottom.
+  `AdminAccountRow.js` and `AdminAccountPanel.js` are new.
+- (19 Oct) "Copy the code for MetaEditor" is gone, by the owner's choice
+  (a long paste turns into "message.txt" in chat apps): the only way is
+  the ready-made `.mq5` download KeyReveal offers after Make/New key, saved
+  as a binary download so no browser renames it to .txt. `EaCodeBox.js`
+  is deleted; the blank EA stays as a link in admin's EA section.
+- (19 Oct) The accounts table's Floating DD shows the money under the
+  percentage (equity less balance, credit out).
+- (19 Oct) All eight demo accounts were deleted from the live database by
+  the owner's choice; `supabase/demo-account.sql` still makes them.
 - (19 Oct) `ADMIN_PASSWORD` can be a 4-digit PIN, by the owner's choice
   (`MIN_PASSWORD_LENGTH` is 4; shorter or missing still switches admin
   off). Because the Admin link is on every page, the PIN is guarded by a
-  global lockout in the database: `schema.sql` section 7 adds the one-row
-  `admin_guard` table and `admin_attempt(p_tag, p_ok, p_max, p_lock)`
+  lockout in the database: `schema.sql` section 7 adds the
+  `admin_guard` table (one row per password tag) and `admin_attempt(p_tag, p_ok, p_max, p_lock)`
   (service role only; later sections renumbered 8 to 10). After 5 wrong
   tries in a row, from anyone, every attempt is refused for 1 hour, the
   right PIN included, and the count is left alone while locked; a right
   PIN when not locked resets it. The row stores a tag of the current
   password, an HMAC keyed by `SUPABASE_SERVICE_ROLE_KEY` (`adminTag()` in
-  `src/lib/adminAuth.js`); a different tag starts afresh, so changing
-  `ADMIN_PASSWORD` in Vercel and redeploying unlocks admin at once. The
+  `src/lib/adminAuth.js`); each tag keeps its own count, so a new PIN
+  starts unlocked (changing `ADMIN_PASSWORD` in Vercel and redeploying
+  unlocks admin at once) and an old deployment or a local copy with
+  another PIN never resets the current one's count. The
   admin cookie's HMAC is now keyed by the pepper and the password
   together (same format and 30-day life), so a stolen cookie cannot be
   used to try PINs offline. The sign-in action decides in
