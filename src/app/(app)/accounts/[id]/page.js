@@ -12,6 +12,7 @@ import OpenPositionsTable from "@/components/OpenPositionsTable";
 import BasketsTable from "@/components/BasketsTable";
 import ClosedBasketsTable from "@/components/ClosedBasketsTable";
 import ReportForm from "@/components/ReportForm";
+import { isAdmin } from "@/lib/access";
 import AttentionBanner from "@/components/AttentionBanner";
 import RiskPanel from "@/components/RiskPanel";
 import { db } from "@/lib/db";
@@ -211,7 +212,11 @@ export default async function AccountPage({ params, searchParams }) {
         />
       </section>
 
-      <ReportForm action={`/api/reports/account/${account.id}`} title="PDF report for this account" />
+      <ReportForm
+        action={`/api/reports/account/${account.id}`}
+        title="PDF report for this account"
+        print={(await isAdmin()) ? { report: "account", target: account.id } : null}
+      />
     </div>
   );
 }

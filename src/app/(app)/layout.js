@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { adminSignOut } from "@/app/(auth)/admin/login/actions";
 import LogoMark from "@/components/LogoMark";
+import PrintButton from "@/components/PrintButton";
 import { isAdmin } from "@/lib/access";
 import { listProjects } from "@/lib/data";
 import { db } from "@/lib/db";
@@ -28,9 +29,12 @@ export default async function AppLayout({ children }) {
             <Link href="/admin" className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">Admin</Link>
           </nav>
           {admin && (
-            <form action={adminSignOut} className="ml-auto text-xs text-muted">
-              <button type="submit" className="hover:text-ink">Leave admin</button>
-            </form>
+            <div className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-2">
+              <PrintButton label="Print fleet summary" report="fleet" />
+              <form action={adminSignOut} className="text-xs text-muted">
+                <button type="submit" className="hover:text-ink">Leave admin</button>
+              </form>
+            </div>
           )}
         </div>
         <div className="neon-rule" />

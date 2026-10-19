@@ -14,8 +14,16 @@ import { APP_NAME } from "./site.js";
 export const PAGE_W = 595.28;
 export const PAGE_H = 841.89;
 const M = 40;
-const COL = PAGE_W - M * 2;
-const BOTTOM = PAGE_H - M - 24;
+
+// The width between the margins and the lowest a row may reach, from the
+// page itself, so the same helpers lay out portrait and landscape.
+function colW(doc) {
+  return doc.page.width - M * 2;
+}
+
+function bottomOf(doc) {
+  return doc.page.height - M - 24;
+}
 
 const INK = "#111827";
 const MUTED = "#6b7280";
@@ -34,9 +42,9 @@ export function pdfText(value) {
     .replace(/[^\u0000-ÿ€]/g, "?");
 }
 
-function render(draw) {
+function render(draw, { layout = "portrait" } = {}) {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: M, bufferPages: true, info: { Producer: APP_NAME, Creator: APP_NAME } });
+    const doc = new PDFDocument({ size: "A4", layout, margin: M, bufferPages: true, info: { Producer: APP_NAME, Creator: APP_NAME } });
     const chunks = [];
     doc.on("data", (c) => chunks.push(c));
     doc.on("end", () => resolve(Buffer.concat(chunks.map((c) => (Buffer.isBuffer(c) ? c : Buffer.from(c))))));
@@ -52,6 +60,7 @@ function render(draw) {
 }
 
 function footers(doc) {
+  const COL = colW(doc);
   const { start, count } = doc.bufferedPageRange();
   const stamp = `Generated ${londonTime(new Date().toISOString())} London time`;
   for (let i = start; i < start + count; i++) {
@@ -59,14 +68,14 @@ function footers(doc) {
     const bottom = doc.page.margins.bottom;
     doc.page.margins.bottom = 0;
     doc.font("Helvetica").fontSize(7).fillColor(MUTED);
-    doc.text(pdfText(`${APP_NAME} · ${stamp}`), M, PAGE_H - M + 8, { width: COL / 2, lineBreak: false });
-    doc.text(`Page ${i - start + 1} of ${count}`, M + COL / 2, PAGE_H - M + 8, { width: COL / 2, align: "right", lineBreak: false });
+    doc.text(pdfText(`${APP_NAME} · ${stamp}`), M, doc.page.height - M + 8, { width: COL / 2, lineBreak: false });
+    doc.text(`Page ${i - start + 1} of ${count}`, M + COL / 2, doc.page.height - M + 8, { width: COL / 2, align: "right", lineBreak: false });
     doc.page.margins.bottom = bottom;
   }
 }
 
 function ensureSpace(doc, needed) {
-  if (doc.y + needed > BOTTOM) doc.addPage();
+  if (doc.y + needed > bottomOf(doc)) doc.addPage();
 }
 
 function periodLine(range, firstDay) {
@@ -78,9 +87,14 @@ function periodLine(range, firstDay) {
 }
 
 function header(doc, { eyebrow, title, lines }) {
-  doc.font("Helvetica-Bold").fontSize(8).fillColor(ACCENT).text(pdfText(eyebrow.toUpperCase()), M, M, { characterSpacing: 1 });
-  doc.moveDown(0.3);
-  doc.font("Helvetica-Bold").fontSize(20).fillColor(INK).text(pdfText(title));
+  const COL = colW(doc);
+  if (eyebrow) {
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(ACCENT).text(pdfText(eyebrow.toUpperCase()), M, M, { characterSpacing: 1 });
+    doc.moveDown(0.3);
+  } else {
+    doc.y = M;
+  }
+  doc.font("Helvetica-Bold").fontSize(20).fillColor(INK).text(pdfText(title), M, doc.y);
   doc.font("Helvetica").fontSize(9).fillColor(MUTED);
   for (const l of lines) if (l) doc.text(pdfText(l));
   doc.moveDown(0.8);
@@ -88,8 +102,10 @@ function header(doc, { eyebrow, title, lines }) {
   doc.moveDown(0.8);
 }
 
-function sectionTitle(doc, text) {
-  ensureSpace(doc, 40);
+// keepWith is room for what follows, so a title is never left alone at the
+// foot of a page: a table's header and first rows by default.
+function sectionTitle(doc, text, keepWith = 60) {
+  ensureSpace(doc, 30 + keepWith);
   doc.moveDown(0.6);
   doc.font("Helvetica-Bold").fontSize(11).fillColor(INK).text(pdfText(text), M, doc.y);
   doc.moveDown(0.4);
@@ -97,6 +113,7 @@ function sectionTitle(doc, text) {
 
 // A grid of labelled figures, four to a row.
 function figures(doc, items) {
+  const COL = colW(doc);
   const perRow = 4;
   const gap = 8;
   const w = (COL - gap * (perRow - 1)) / perRow;
@@ -121,8 +138,11 @@ function toneOf(v) {
 }
 
 // Closing balance by day, as a simple line.
+const CURVE_H = 150;
+
 function curve(doc, points, currency) {
-  const h = 150;
+  const COL = colW(doc);
+  const h = CURVE_H;
   ensureSpace(doc, h + 20);
   const x0 = M;
   const y0 = doc.y;
@@ -162,6 +182,7 @@ function curve(doc, points, currency) {
 
 // A table that carries on across pages, repeating its header.
 function table(doc, columns, rows, { fontSize = 8 } = {}) {
+  const COL = colW(doc);
   const rowH = fontSize + 7;
   const totalW = columns.reduce((s, c) => s + c.width, 0);
   const scale = COL / totalW;
@@ -182,16 +203,16 @@ function table(doc, columns, rows, { fontSize = 8 } = {}) {
   ensureSpace(doc, rowH * 3);
   drawHeader();
   for (const r of rows) {
-    if (doc.y + rowH > BOTTOM) {
+    if (doc.y + rowH > bottomOf(doc)) {
       doc.addPage();
       drawHeader();
     }
     const y = doc.y;
     let x = M;
-    doc.font("Helvetica").fontSize(fontSize);
     r.forEach((cell, i) => {
       const c = cols[i];
       const value = typeof cell === "object" && cell !== null ? cell : { text: cell };
+      doc.font(value.bold ? "Helvetica-Bold" : "Helvetica").fontSize(fontSize);
       doc.fillColor(value.tone ?? INK).text(pdfText(value.text), x + 4, y + 4, { width: c.width - 8, align: c.align ?? "left", lineBreak: false });
       x += c.width;
     });
@@ -244,7 +265,7 @@ export function accountReportPdf(model) {
       { label: "Balance now", value: money(a.balance, c), sub: a.last_sync_at ? `Synced ${londonTime(a.last_sync_at)}` : null },
     ]);
 
-    sectionTitle(doc, "Closing balance");
+    sectionTitle(doc, "Closing balance", CURVE_H + 20);
     curve(doc, points, c);
 
     sectionTitle(doc, "By month");
@@ -309,6 +330,7 @@ export function accountReportPdf(model) {
 export function projectReportPdf(model) {
   const { project, range, rows, totals } = model;
   return render((doc) => {
+    const COL = colW(doc);
     header(doc, {
       eyebrow: `${APP_NAME} · project report`,
       title: project.name,
@@ -362,4 +384,121 @@ export function projectReportPdf(model) {
       { width: COL }
     );
   });
+}
+
+// ------------------------------------------------------------------ fleet
+
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+// The office printer's fleet summary: every project's accounts as the
+// overview's table shows them, totals per currency under each, then the
+// baskets that could be closed now with the week still up. Landscape A4,
+// one page for about fifteen accounts; more flow on, headers repeated.
+export function fleetReportPdf(model) {
+  const { generatedAt, today, accounts, projects, closable } = model;
+  return render(
+    (doc) => {
+      const COL = colW(doc);
+      header(doc, {
+        title: `${APP_NAME} · Fleet summary`,
+        lines: [
+          `Printed ${londonTime(generatedAt)} London time · ${plural(accounts, "account")} · today is ${dayLabel(today)}, the week from Monday`,
+          "Figures as of each account's last sync. Accounts in different currencies are totalled separately.",
+        ],
+      });
+
+      for (const { project, rows, totals } of projects) {
+        // Room for the table's header and first row (7.5pt rows), or the note.
+        sectionTitle(doc, `${project.name} · ${plural(rows.length, "account")}`, rows.length ? 32 : 14);
+        if (!rows.length) {
+          doc.font("Helvetica").fontSize(8).fillColor(MUTED).text("No accounts yet.", M, doc.y);
+          continue;
+        }
+        const body = rows.map((r) => {
+          const c = r.currency;
+          const name = r.account_number ? `${r.label} · ${r.account_number}` : `${r.label} (not connected)`;
+          const sync = r.last_sync_at ? `${londonTime(r.last_sync_at)}${r.status === "offline" ? " (offline)" : ""}` : "never";
+          if (r.balance === null) return [name, "-", "-", "-", "-", "-", "-", "-", "-", sync];
+          return [
+            name,
+            money(r.balance, c),
+            money(r.equity, c),
+            pct(r.floatingDd),
+            signed(r.floating, c),
+            signed(r.periods.today.pnl, c),
+            signed(r.periods.week.pnl, c),
+            signed(r.periods.month.pnl, c),
+            { text: pct(r.periods.all.gain, { sign: true }), tone: toneOf(r.periods.all.gain) },
+            sync,
+          ];
+        });
+        for (const t of totals) {
+          const c = t.currency;
+          const bold = (v) => ({ text: money(v, c, { sign: true }), tone: toneOf(v), bold: true });
+          body.push([
+            { text: `Total ${c} · ${plural(t.accounts, "account")}`, bold: true },
+            { text: money(t.balance, c), bold: true },
+            { text: money(t.equity, c), bold: true },
+            "",
+            bold(t.floating),
+            bold(t.today),
+            bold(t.week),
+            bold(t.month),
+            "",
+            "",
+          ]);
+        }
+        table(
+          doc,
+          [
+            { label: "Account", width: 160 },
+            { label: "Balance", width: 72, align: "right" },
+            { label: "Equity", width: 72, align: "right" },
+            { label: "Floating DD", width: 52, align: "right" },
+            { label: "Floating", width: 66, align: "right" },
+            { label: "Today", width: 64, align: "right" },
+            { label: "This week", width: 64, align: "right" },
+            { label: "This month", width: 64, align: "right" },
+            { label: "Gain", width: 48, align: "right" },
+            { label: "Last sync (London)", width: 100 },
+          ],
+          body,
+          { fontSize: 7.5 }
+        );
+      }
+
+      sectionTitle(doc, "Baskets you can close and still be up for the week", closable.length ? 32 : 14);
+      if (closable.length) {
+        table(
+          doc,
+          [
+            { label: "Account", width: 200 },
+            { label: "Basket", width: 110 },
+            { label: "Floating", width: 90, align: "right" },
+            { label: "Week so far", width: 90, align: "right" },
+            { label: "Week if closed", width: 90, align: "right" },
+          ],
+          closable.map((b) => [
+            b.label,
+            `${b.symbol} ${b.side}`,
+            signed(b.floating, b.currency),
+            signed(b.week, b.currency),
+            signed(b.leftover, b.currency),
+          ]),
+          { fontSize: 7.5 }
+        );
+        doc.font("Helvetica").fontSize(7).fillColor(MUTED).text(
+          "Each basket is judged against the week on its own: two listed for one account may not both be closable together.",
+          M,
+          doc.y,
+          { width: COL }
+        );
+      } else {
+        doc.font("Helvetica").fontSize(8).fillColor(MUTED).text("None right now: no basket in loss could be closed with the week still up.", M, doc.y);
+      }
+    },
+    { layout: "landscape" }
+  );
 }

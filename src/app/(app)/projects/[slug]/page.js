@@ -5,6 +5,7 @@ import ProjectTotals from "@/components/ProjectTotals";
 import AttentionPanel from "@/components/AttentionPanel";
 import MonthlyMatrix from "@/components/MonthlyMatrix";
 import ReportForm from "@/components/ReportForm";
+import { isAdmin } from "@/lib/access";
 import { db } from "@/lib/db";
 import { listProjects, listAccounts, dailyFor, openPositionsFor, openBasketsFor } from "@/lib/data";
 import { accountRow, currencyTotals } from "@/lib/accountView";
@@ -58,7 +59,11 @@ export default async function ProjectPage({ params }) {
         <h2 className="text-base font-semibold">By month</h2>
         <MonthlyMatrix rows={rows} months={months} />
       </section>
-      <ReportForm action={`/api/reports/project/${project.slug}`} title={`${project.name} report, every account`} />
+      <ReportForm
+        action={`/api/reports/project/${project.slug}`}
+        title={`${project.name} report, every account`}
+        print={(await isAdmin()) ? { report: "project", target: project.slug } : null}
+      />
     </div>
   );
 }

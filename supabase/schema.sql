@@ -13,9 +13,10 @@
 --   * Every write goes through the service role too: /api/sync after it
 --     has checked the terminal's key, and the admin screen's actions after
 --     they have checked the admin password. The functions that write
---     (sync_open_positions, track_baskets, admin_attempt) can be run by
---     the service role only (section 9).
---   * Sync keys are stored only as SHA-256 hashes, in their own table.
+--     (sync_open_positions, track_baskets, admin_attempt, claim_print_job,
+--     finish_print_job) can be run by the service role only (section 10).
+--   * Sync keys and print agent keys are stored only as SHA-256 hashes, in
+--     their own tables.
 --   * The admin sign-in's lockout lives here (section 7), so guesses at a
 --     short ADMIN_PASSWORD are counted for everyone at once.
 --
@@ -301,7 +302,7 @@ create index if not exists baskets_account_closed_idx
 -- Safe to repeat: the EA resends a sync whose reply it never got, and the
 -- same p_at and snapshot leave the same rows. It locks the account's row,
 -- which sync_open_positions already holds; the lock only matters if this
--- is ever run on its own. Service role only (see section 9). If the
+-- is ever run on its own. Service role only (see section 10). If the
 -- arguments ever change, drop this signature first: "create or replace"
 -- would add a second function beside it rather than replace it.
 create or replace function public.track_baskets(p_account uuid, p_at timestamptz, p_balance numeric, p_complete boolean)
@@ -397,7 +398,7 @@ $$;
 -- derived data that the next good sync puts right, and a failure there
 -- must never stop the account syncing.
 --
--- Service role only (see section 9). If the arguments ever change, drop
+-- Service role only (see section 10). If the arguments ever change, drop
 -- this signature first, as with track_baskets.
 create or replace function public.sync_open_positions(
   p_account uuid, p_rows jsonb, p_at timestamptz, p_balance numeric, p_complete boolean)
@@ -470,7 +471,7 @@ alter table public.admin_guard enable row level security;
 --                 null: let in when p_ok, otherwise one more wrong try.
 --   failures      wrong tries in a row so far (0 once a lock starts).
 -- The row is locked first, so attempts made at the same moment take turns
--- and each is counted. Service role only (see section 9). If the
+-- and each is counted. Service role only (see section 10). If the
 -- arguments ever change, drop this signature first, as with track_baskets.
 create or replace function public.admin_attempt(
   p_tag text, p_ok boolean, p_max int, p_lock interval,
@@ -679,12 +680,179 @@ left join lateral (
 ) r on true;
 
 -- ---------------------------------------------------------------------------
--- 9. The browser roles get nothing. Only the server's service role reads.
+-- 9. Print queue: the office printer, pull-only.
+--
+-- A web page cannot reach a printer, so nothing ever connects to the
+-- office. An admin's Print button adds a row to print_jobs; a
+-- small agent on the office Mac (scripts/print-agent.mjs) asks
+-- /api/print-queue every few seconds with its own key, which calls
+-- claim_print_job, downloads the PDF, prints it and reports back through
+-- finish_print_job. A Mac that is asleep simply leaves the job queued.
+--
+-- Agent keys are stored only as their SHA-256, in hex, in
+-- print_agent_keys, one row per key; the site hashes the key it is sent
+-- and the functions below decide whether it is known. Making one is one
+-- insert (docs/print-agent.md); rotating one is an insert and a delete.
+-- print_agents is each agent's last poll, which is how the button knows
+-- whether the printer is online.
+-- ---------------------------------------------------------------------------
+create table if not exists public.print_jobs (
+  id           bigint generated always as identity primary key,
+  kind         text not null
+               check (kind in ('fleet_summary', 'project_report', 'account_report')),
+  -- The report on this site the agent downloads: the fleet summary, or a
+  -- project's or an account's report with the dates the admin picked.
+  -- Never a whole URL, so a row can only ever point at this site.
+  path         text not null default '/api/reports/fleet'
+               check (path ~ '^/api/reports/(fleet|project/[a-z0-9-]{1,40}|account/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\?(from=[0-9]{4}-[0-9]{2}-[0-9]{2}(&to=[0-9]{4}-[0-9]{2}-[0-9]{2})?|to=[0-9]{4}-[0-9]{2}-[0-9]{2}))?$'),
+  copies       int not null default 1 check (copies between 1 and 5),
+  status       text not null default 'queued'
+               check (status in ('queued', 'printing', 'printed', 'failed')),
+  requested_at timestamptz not null default now(),
+  claimed_at   timestamptz,
+  finished_at  timestamptz,
+  agent        text,
+  error        text
+);
+
+create index if not exists print_jobs_status_requested_at
+  on public.print_jobs (status, requested_at);
+
+-- The kind says which report the path is.
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'print_jobs_kind_matches_path') then
+    alter table public.print_jobs add constraint print_jobs_kind_matches_path check (
+         (kind = 'fleet_summary' and path = '/api/reports/fleet')
+      or (kind = 'project_report' and path like '/api/reports/project/%')
+      or (kind = 'account_report' and path like '/api/reports/account/%'));
+  end if;
+end
+$$;
+
+-- One waiting job per report: a second click while the Mac is asleep is
+-- handed the first job (src/lib/printQueue.js), so it prints once.
+create unique index if not exists print_jobs_one_queued_per_path
+  on public.print_jobs (path) where status = 'queued';
+
+create table if not exists public.print_agents (
+  name         text primary key,
+  printer      text,
+  version      text,
+  last_seen_at timestamptz not null
+);
+
+create table if not exists public.print_agent_keys (
+  -- The hash, never the key: 64 lower-case hex characters.
+  key_hash   text primary key check (key_hash ~ '^[0-9a-f]{64}$'),
+  label      text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.print_jobs enable row level security;
+alter table public.print_agents enable row level security;
+alter table public.print_agent_keys enable row level security;
+
+-- No policies (see projects above).
+
+-- What the agent's poll calls. Refuses a key hash that is not in
+-- print_agent_keys with SQLSTATE 28000 (the route answers 401), then:
+--   * records the agent's heartbeat (print_agents),
+--   * fails a job left in 'printing' for over 10 minutes (the agent died
+--     mid-job; reprinting it unasked could print twice),
+--   * fails a job still 'queued' after 24 hours (a summary that old is
+--     not what anyone asked for),
+--   * claims the oldest queued job, if any, and returns it.
+-- Returns no row when there is nothing to print. skip locked, so two
+-- agents polling at once never both get the same job. Service role only
+-- (see section 10). If the arguments ever change, drop this signature
+-- first, as with track_baskets.
+create or replace function public.claim_print_job(
+  p_key_hash text, p_agent text, p_printer text, p_version text)
+returns setof public.print_jobs
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_agent text := left(btrim(coalesce(p_agent, '')), 64);
+  v_id    bigint;
+begin
+  if p_key_hash is null
+     or not exists (select 1 from public.print_agent_keys k where k.key_hash = p_key_hash) then
+    raise exception 'unknown print agent key' using errcode = '28000';
+  end if;
+  if v_agent = '' then
+    raise exception 'claim_print_job needs an agent name' using errcode = '22023';
+  end if;
+
+  insert into public.print_agents as a (name, printer, version, last_seen_at)
+    values (v_agent, left(p_printer, 128), left(p_version, 32), now())
+  on conflict (name) do update
+    set printer = excluded.printer, version = excluded.version, last_seen_at = excluded.last_seen_at;
+
+  update public.print_jobs j
+     set status = 'failed', finished_at = now(),
+         error = 'The print agent did not report back within 10 minutes.'
+   where j.status = 'printing' and j.claimed_at < now() - interval '10 minutes';
+
+  update public.print_jobs j
+     set status = 'failed', finished_at = now(),
+         error = 'Not printed within 24 hours: the office Mac was not on.'
+   where j.status = 'queued' and j.requested_at < now() - interval '24 hours';
+
+  select j.id into v_id
+    from public.print_jobs j
+   where j.status = 'queued'
+   order by j.requested_at, j.id
+   limit 1
+   for update skip locked;
+
+  if v_id is null then
+    return;
+  end if;
+
+  return query
+    update public.print_jobs j
+       set status = 'printing', claimed_at = now(), agent = v_agent
+     where j.id = v_id
+    returning j.*;
+end;
+$$;
+
+-- What the agent's report calls once lp has run. Marks a job that is
+-- 'printing' as printed or failed, with lp's own error trimmed to 300
+-- characters, and returns whether it did. A job in any other state (failed
+-- by the 10-minute rule meanwhile, or never claimed) is left alone. Same
+-- key check as claim_print_job. Service role only (see section 10).
+create or replace function public.finish_print_job(
+  p_key_hash text, p_id bigint, p_ok boolean, p_error text)
+returns boolean
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if p_key_hash is null
+     or not exists (select 1 from public.print_agent_keys k where k.key_hash = p_key_hash) then
+    raise exception 'unknown print agent key' using errcode = '28000';
+  end if;
+
+  update public.print_jobs j
+     set status = case when p_ok then 'printed' else 'failed' end,
+         finished_at = now(),
+         error = case when p_ok then null
+                      else left(coalesce(nullif(btrim(p_error), ''), 'The printer gave no reason.'), 300) end
+   where j.id = p_id and j.status = 'printing';
+  return found;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 10. The browser roles get nothing. Only the server's service role reads.
 -- ---------------------------------------------------------------------------
 revoke all on public.projects, public.accounts, public.account_keys,
   public.deals, public.equity_samples, public.open_positions, public.baskets,
   public.account_daily, public.account_positions, public.basket_results,
-  public.admin_guard
+  public.admin_guard, public.print_jobs, public.print_agents, public.print_agent_keys
   from anon, authenticated;
 
 -- Postgres lets everyone run a new function, and Supabase grants the
@@ -699,9 +867,15 @@ grant execute on function public.sync_open_positions(uuid, jsonb, timestamptz, n
 revoke all on function public.admin_attempt(text, boolean, int, interval)
   from public, anon, authenticated;
 grant execute on function public.admin_attempt(text, boolean, int, interval) to service_role;
+revoke all on function public.claim_print_job(text, text, text, text)
+  from public, anon, authenticated;
+grant execute on function public.claim_print_job(text, text, text, text) to service_role;
+revoke all on function public.finish_print_job(text, bigint, boolean, text)
+  from public, anon, authenticated;
+grant execute on function public.finish_print_job(text, bigint, boolean, text) to service_role;
 
 -- ---------------------------------------------------------------------------
--- 10. Leftovers. A fresh database never has them; a re-run removes them from
+-- 11. Leftovers. A fresh database never has them; a re-run removes them from
 -- an older one.
 -- ---------------------------------------------------------------------------
 

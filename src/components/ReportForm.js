@@ -1,8 +1,11 @@
+import PrintButton from "@/components/PrintButton";
 import { inputClass, labelClass, buttonClass } from "@/lib/ui";
 
 // A plain GET form: the PDF route reads from and to off the query string.
 // Both are London days and both are included. Either may be left blank.
-export default function ReportForm({ action, title = "PDF report" }) {
+// print ({ report, target }, admins only) adds a Print button that sends
+// the same report, with the same dates, to the office printer.
+export default function ReportForm({ action, title = "PDF report", print = null }) {
   return (
     <form action={action} method="get" target="_blank" className="hud rounded-md border border-line bg-panel p-4">
       <p className="mb-3 text-sm font-medium">{title}</p>
@@ -16,8 +19,11 @@ export default function ReportForm({ action, title = "PDF report" }) {
           <input id={`${action}-to`} type="date" name="to" className={inputClass} />
         </div>
         <button type="submit" className={buttonClass}>Download PDF</button>
+        {print && <PrintButton report={print.report} target={print.target} />}
       </div>
-      <p className="mt-2 text-xs text-muted">Leave both blank for the whole history. Opens in a new tab, ready to print.</p>
+      <p className="mt-2 text-xs text-muted">
+        Leave both blank for the whole history.{print ? " Print sends it to the office printer." : " Opens in a new tab, ready to print."}
+      </p>
     </form>
   );
 }

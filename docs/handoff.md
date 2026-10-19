@@ -4,6 +4,41 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
+## 2026-10-19 (Claude Code, Mac): Algorithms on the admin page; office printing
+
+### What changed
+
+- Admin: an **Algorithms** card adds, renames and (when empty) deletes a
+  project, so a new bot sits beside V100 and Cycle Method.
+- Printing (`docs/print-agent.md`): **Print fleet summary** in the header
+  and **Print** beside **Download PDF** in the project and account report
+  boxes, admins only. Pull-only: `POST /api/print` queues a row in
+  `print_jobs` (with the report's `path`); `scripts/print-agent.mjs` on the
+  office Mac polls `/api/print-queue` with its own key (SHA-256 in
+  `print_agent_keys`), prints with `lp` and reports back. One queued job per
+  report, so a repeat click while the Mac sleeps prints once.
+- Fleet summary PDF at `/api/reports/fleet` (landscape A4). Section titles
+  keep room for what follows, so none is left alone at a page foot.
+- Schema section 9 (print) is applied to the live database; the functions'
+  md5 matches the repo.
+
+### State
+
+- Committed and pushed. No print agent is installed yet and
+  `print_agent_keys` is empty, so a Print click says the printer is
+  offline and the job waits (it fails after 24 hours).
+
+### Next
+
+- Install the agent on the office Mac (`docs/print-agent.md`): make the key
+  there, insert only its hash, load the LaunchAgent, print a test page.
+
+### Watch out for
+
+- The agent prints only addresses under `/api/reports/` on its own
+  `PRINT_AGENT_URL`; the table's check allows nothing else either.
+
+---
 ## 2026-10-17 (Claude Code, Mac): Distance to stop-out; highlights cut to the green closable flag (18 Oct); admin PIN with a lockout (19 Oct)
 
 ### What changed

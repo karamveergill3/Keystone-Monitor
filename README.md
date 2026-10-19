@@ -218,7 +218,15 @@ duplicated.
 Send the link. Anyone who has it sees everything; there is nothing to set
 up for them.
 
-### 6. Demo accounts (optional)
+### 6. Printing in the office (optional)
+
+Signed in to admin, **Print fleet summary** in the header and **Print** in
+each report box send that PDF to the office printer. Nothing connects to
+the office: a small agent on the office Mac collects queued jobs from the
+site and prints them with `lp`. Setting it up, and its key:
+[`docs/print-agent.md`](docs/print-agent.md).
+
+### 7. Demo accounts (optional)
 
 `supabase/demo-account.sql` loads eight sample accounts, all labelled
 `DEMO ·`, so the overview has something to show before real terminals are
