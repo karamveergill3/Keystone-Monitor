@@ -100,18 +100,24 @@ created_at from public.print_agent_keys;` lists what is there.
 
 ## 3. Install the LaunchAgent
 
-The agent needs Node 22 or later (`node --version`) and a clone of this
-repository on the Mac. It has no dependencies, so no `npm install` is
-needed for it.
+The agent needs Node 22 or later (`node --version`). It is one file with
+no dependencies, so no `npm install` is needed for it.
+
+macOS does not let a LaunchAgent read `~/Documents` (or Desktop or
+Downloads), so copy the script out of the clone first. Copy it again after
+pulling a change to `scripts/print-agent.mjs`, then restart (step 4).
 
 ```sh
+mkdir -p ~/Library/Application\ Support/Keystone\ Monitor
+cp scripts/print-agent.mjs ~/Library/Application\ Support/Keystone\ Monitor/
 command -v node            # the absolute path to put in the plist
 cp deploy/keystone-monitor.printagent.plist ~/Library/LaunchAgents/
 open -e ~/Library/LaunchAgents/keystone-monitor.printagent.plist
 ```
 
-In the copy, replace `/ABSOLUTE/PATH/TO/node`, `/ABSOLUTE/PATH/TO/Keystone-Monitor`
-and `/Users/USERNAME` (twice, in the log paths). Then:
+In the copy, replace `/ABSOLUTE/PATH/TO/node` and `/Users/USERNAME`
+(twice, in the log paths). A node from nvm works, but its path changes
+with each Node version: update the plist after removing the old one. Then:
 
 ```sh
 plutil -lint ~/Library/LaunchAgents/keystone-monitor.printagent.plist

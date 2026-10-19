@@ -4,9 +4,10 @@
   Keystone Monitor print agent, as a LaunchAgent for the user signed in on
   the office Mac. docs/print-agent.md says how to install it.
 
-  Before installing, replace:
+  Before installing, copy scripts/print-agent.mjs to
+  ~/Library/Application Support/Keystone Monitor/ (a LaunchAgent cannot
+  read ~/Documents), then replace:
     /ABSOLUTE/PATH/TO/node   with the output of `command -v node` (Node 22+)
-    /ABSOLUTE/PATH/TO/Keystone-Monitor   with where the repository is cloned
     /Users/USERNAME          with the Mac user's home folder
 
   The agent's settings (the key among them) live in
@@ -21,7 +22,7 @@
   <array>
     <string>/bin/sh</string>
     <string>-c</string>
-    <string>[ -r "$HOME/.keystone-monitor-print.env" ] &amp;&amp; { set -a; . "$HOME/.keystone-monitor-print.env"; set +a; }; exec /ABSOLUTE/PATH/TO/node /ABSOLUTE/PATH/TO/Keystone-Monitor/scripts/print-agent.mjs</string>
+    <string>[ -r "$HOME/.keystone-monitor-print.env" ] &amp;&amp; { set -a; . "$HOME/.keystone-monitor-print.env"; set +a; }; exec /ABSOLUTE/PATH/TO/node "$HOME/Library/Application Support/Keystone Monitor/print-agent.mjs"</string>
   </array>
 
   <key>RunAtLoad</key>

@@ -24,14 +24,18 @@ machines. Keep the four headings.
 
 ### State
 
-- Committed and pushed. No print agent is installed yet and
-  `print_agent_keys` is empty, so a Print click says the printer is
-  offline and the job waits (it fails after 24 hours).
+- Committed and pushed. The agent is installed on the office Mac as
+  `office-mac` (LaunchAgent `keystone-monitor.printagent`, script copied to
+  `~/Library/Application Support/Keystone Monitor/`, key in
+  `~/.keystone-monitor-print.env`, its hash the one row in
+  `print_agent_keys`). Test job 1, a fleet summary, printed in 6 seconds.
 
 ### Next
 
-- Install the agent on the office Mac (`docs/print-agent.md`): make the key
-  there, insert only its hash, load the LaunchAgent, print a test page.
+- Keep the office Mac from sleeping on mains power (`sudo pmset -c sleep 0`,
+  needs the owner's password), or Print says offline while it sleeps.
+- After changing `scripts/print-agent.mjs`, copy it to the folder above and
+  `launchctl kickstart -k gui/$(id -u)/keystone-monitor.printagent`.
 
 ### Watch out for
 
