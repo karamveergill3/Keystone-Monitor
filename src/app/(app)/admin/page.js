@@ -1,5 +1,6 @@
 import Link from "next/link";
 import AddAccountForm from "@/components/AddAccountForm";
+import AdminAlgorithms from "@/components/AdminAlgorithms";
 import AdminAccountRow from "@/components/AdminAccountRow";
 import ConfirmButton from "@/components/ConfirmButton";
 import { requireAdmin } from "@/lib/access";
@@ -31,10 +32,15 @@ export default async function AdminPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold">Admin</h1>
-        <p className="text-sm text-muted">Add accounts and connect their MT5 terminals.</p>
+        <p className="text-sm text-muted">Add accounts and algorithms, and connect their MT5 terminals.</p>
       </div>
 
       <AddAccountForm projects={projects} />
+
+      <AdminAlgorithms
+        projects={projects}
+        counts={new Map(projects.map((p) => [p.id, accounts.filter((a) => a.project_id === p.id).length]))}
+      />
 
       <div className="space-y-6">
         {projects.map((p) => {

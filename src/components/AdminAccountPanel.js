@@ -21,7 +21,7 @@ export default function AdminAccountPanel({ account: a, projects, keyHint }) {
             <input id={`${field}-label`} name="label" defaultValue={a.label} required maxLength={80} className={inputClass} />
           </div>
           <div className="w-full sm:w-44">
-            <label htmlFor={`${field}-project`} className={labelClass}>Project</label>
+            <label htmlFor={`${field}-project`} className={labelClass}>Algorithm</label>
             <select id={`${field}-project`} name="projectId" defaultValue={a.project_id} className={`${inputClass} h-[2.625rem]`}>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}</option>

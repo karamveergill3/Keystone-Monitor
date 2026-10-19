@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/access";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { generateSyncKey, hashSyncKey, keyHint } from "@/lib/syncKeys";
+import { projectSlug } from "@/lib/projectSlug";
 
 const UUID = /^[0-9a-f-]{36}$/i;
 
@@ -114,5 +115,48 @@ export async function deleteUnusedAccount(formData) {
     .eq("id", id(formData, "accountId"))
     .is("account_number", null)
     .is("last_sync_at", null);
+  done();
+}
+
+// -------------------------------------------------------------- algorithms
+//
+// An algorithm (a project in the database: V100, Cycle Method) is a group
+// of accounts with its own section, tab and pages. A new one goes last.
+
+export async function createProject(_prev, formData) {
+  await requireAdmin();
+  const name = text(formData, "name", 40);
+  if (!name) return { ok: false, message: "Give the algorithm a name." };
+  const db = createAdminClient();
+  const { data: existing, error: readError } = await db.from("projects").select("slug, sort, name");
+  if (readError) return { ok: false, message: readError.message };
+  if ((existing ?? []).some((p) => p.name.toLowerCase() === name.toLowerCase())) {
+    return { ok: false, message: `There is already an algorithm called ${name}.` };
+  }
+  const slug = projectSlug(name, (existing ?? []).map((p) => p.slug));
+  const sort = Math.max(0, ...(existing ?? []).map((p) => Number(p.sort) || 0)) + 1;
+  const { error } = await db.from("projects").insert({ name, slug, sort });
+  if (error) return { ok: false, message: error.message };
+  done();
+  return { ok: true, message: `${name} added.` };
+}
+
+export async function renameProject(formData) {
+  await requireAdmin();
+  const name = text(formData, "name", 40);
+  if (!name) return;
+  await createAdminClient().from("projects").update({ name }).eq("id", id(formData, "projectId"));
+  done();
+}
+
+// Only an algorithm with no accounts at all, archived ones included, can be
+// deleted; the database refuses anything else too (accounts point at it).
+export async function deleteEmptyProject(formData) {
+  await requireAdmin();
+  const projectId = id(formData, "projectId");
+  const db = createAdminClient();
+  const { count, error } = await db.from("accounts").select("id", { count: "exact", head: true }).eq("project_id", projectId);
+  if (error || count !== 0) return;
+  await db.from("projects").delete().eq("id", projectId);
   done();
 }

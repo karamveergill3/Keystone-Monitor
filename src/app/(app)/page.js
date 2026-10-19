@@ -35,7 +35,7 @@ export default async function OverviewPage() {
       <div>
         <h1 className="text-xl font-semibold">Overview</h1>
         <p className="text-sm text-muted">
-          Every external account, both projects. Days are London days; today is {dayLabel(today)}.
+          Every external account, by algorithm. Days are London days; today is {dayLabel(today)}.
         </p>
       </div>
       <AttentionPanel items={attentionItems(rows)} checked={rows.length} />

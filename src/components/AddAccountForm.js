@@ -18,8 +18,8 @@ export default function AddAccountForm({ projects }) {
           <input id="new-label" name="label" placeholder="e.g. V100 · Sam · 50k" required maxLength={80} className={inputClass} />
         </div>
         <fieldset className="w-full min-w-0 sm:w-auto">
-          <legend className={labelClass}>Project</legend>
-          <div className="flex rounded-md border border-line-strong bg-panel p-0.5">
+          <legend className={labelClass}>Algorithm</legend>
+          <div className="flex flex-wrap rounded-md border border-line-strong bg-panel p-0.5">
             {projects.map((p, i) => (
               <label key={p.id} className="flex-1 cursor-pointer">
                 <input type="radio" name="projectId" value={p.id} defaultChecked={i === 0} required className="peer sr-only" />
