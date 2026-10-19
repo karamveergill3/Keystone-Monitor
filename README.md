@@ -203,6 +203,26 @@ duplicated.
 Send the link. Anyone who has it sees everything; there is nothing to set
 up for them.
 
+### 6. Demo accounts (optional)
+
+`supabase/demo-account.sql` loads eight sample accounts, all labelled
+`DEMO ·`, so the overview has something to show before real terminals are
+connected: four in V100 (50k, 100k, 25k and 10k, the 10k with nothing
+open) and four in Cycle Method (a GBP account, a 75k with a deep basket, a
+20k last synced six hours ago, and a new account that has never synced).
+Run it in the SQL editor after `schema.sql`. It is safe to run again: each
+run deletes the eight and builds them afresh, as of the moment it runs, in
+a few seconds.
+
+Each synced account has about four months of weekday history, 30 days of
+equity samples and open grid baskets, and this week's realised P&L comes
+out at the same figure whatever day it is run, so the same baskets are
+marked closable every time (the file's header lists them). The figures
+are only as fresh as the last run: the synced accounts read as offline 10
+minutes after it, and their week resets on Monday until it is run again.
+Nothing in it is a real account. The delete that removes all eight is at
+the top of the file; archiving one on the admin screen hides it instead.
+
 ## Development
 
 **On a new laptop, start with [`docs/NEW-MACHINE.md`](docs/NEW-MACHINE.md).**
@@ -222,6 +242,7 @@ React 19, Tailwind CSS 4, Supabase, Recharts, pdfkit.
 | Path | What |
 |---|---|
 | `supabase/schema.sql` | Tables, RLS, views, the function /api/sync calls. Applied by hand, before the code that needs it deploys. |
+| `supabase/demo-account.sql` | The eight sample `DEMO ·` accounts. Re-runnable; see Setting it up, step 6. |
 | `src/app/api/sync/route.js` | The EA's endpoint. Logic in `src/lib/syncIngest.js`. |
 | `src/lib/accountStats.js` | Every figure, for screens and PDFs alike. |
 | `src/lib/db.js` | The server's database client, for every page and report. |

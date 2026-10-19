@@ -8,6 +8,26 @@ machines. Keep the four headings.
 
 ### What changed
 
+- (18 Oct) Eight demo accounts instead of one, for more of an overview:
+  `supabase/demo-account.sql` now (re)creates d001 to d008 (all `DEMO ·`,
+  account numbers 90000001 to 90000007): "Test account · 50k" kept as it
+  was, plus V100 100k, 25k (a losing week) and 10k (nothing open), and
+  Cycle Method 30k GBP, 75k (a deep US30 basket), 20k (last synced six
+  hours ago) and a new account that has never synced. One generator
+  (`pg_temp.demo_account`, fed a JSON list of the eight) builds each one;
+  market time is now general (`pg_temp.demo_m`/`demo_t`, market seconds,
+  any number of weekends). Each account's realised P&L for this London
+  week comes out at a fixed figure to the cent on any run day, via a last
+  balancing basket inside the week, so the closable flags never change:
+  d001 EURUSD; d002 GBPUSD and US30; d003 and d004 none; d005 XAUUSD and
+  GBPUSD; d006 EURUSD; d007 XAUUSD. Checked in PGlite as of a Monday
+  00:03 and 00:20, Monday 03:00, Wednesday, Friday 21:50, Saturday 09:00
+  and 12:00, Sunday 22:05 and 22:14:59 (just after the market opens) and
+  Sunday 23:00 (a clock-change day), and run twice: about 3 to 8 seconds
+  a run there. Every closed basket sits inside the sampled 30 days and is
+  never deeper than the equity chart went; d007 always reads 6 hours
+  since its last sync. README step 6 describes it. Loaded on the live
+  database on 19 Oct.
 - (18 Oct) Every warning is gone, by the owner's choice: the green
   closable basket flag is the only highlight on the site. Nothing is
   flagged or coloured for an offline terminal, stop-out or margin call
@@ -79,8 +99,12 @@ the week still up.
   2026.10.17.5 its Margin and stop-out section has no distances (it says
   the EA does not send the broker's levels), and the panel says nothing
   about it.
-- The demo account is never synced, so its sync dot is a hollow ring
-  (offline) after 10 minutes; nothing else marks it.
+- The demo accounts are never synced, so their sync dots read offline
+  10 minutes after the file is run (d007 at once, d008 waiting), and
+  their week resets each Monday until it is run again. Run in the first
+  quarter hour of a Monday, d007 still reads online and the balancing
+  baskets open and close at 00:00 exactly: the week is that young.
+  (18 Oct)
 - The 18 Oct change was checked with `npm test`, `npm run lint` and a
   server render of the changed components; `npm run build` was not run.
 
@@ -88,6 +112,9 @@ the week still up.
 
 - Compile EA 2026.10.17.5 in MetaEditor (not compiled here) and attach it
   to every terminal.
+- (18 Oct) Run the new `supabase/demo-account.sql` on the live database
+  (SQL editor or connector) to load the eight demo accounts; it replaces
+  the old one.
 
 ---
 ## 2026-10-17 (Claude Code, Mac): Grid baskets tracked and flagged, new charts, paged lists; all live
