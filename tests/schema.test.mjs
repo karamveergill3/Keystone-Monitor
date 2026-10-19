@@ -797,6 +797,113 @@ test("a browser writes nothing", async () => {
   }
 });
 
+// The admin sign-in's lockout (section 7), as the login action calls it.
+const ATTEMPT = "select locked_until, failures from public.admin_attempt($1, $2, 5, '1 hour')";
+const TAG_A = "a".repeat(64);
+const TAG_B = "b".repeat(64);
+
+async function attempt(tag, ok) {
+  const { rows } = await asServer({ sql: ATTEMPT, params: [tag, ok] });
+  assert.equal(rows.length, 1);
+  return rows[0];
+}
+
+async function guard(tag = TAG_A) {
+  return (await db.query("select tag, failures, locked_until from public.admin_guard where tag = $1", [tag])).rows;
+}
+
+test("admin_attempt: four wrong PINs then the right one lets you in and resets the count", async () => {
+  for (let i = 1; i <= 4; i++) {
+    assert.deepEqual(await attempt(TAG_A, false), { locked_until: null, failures: i });
+  }
+  assert.deepEqual(await attempt(TAG_A, true), { locked_until: null, failures: 0 });
+  assert.deepEqual(await guard(), [{ tag: TAG_A, failures: 0, locked_until: null }]);
+  assert.deepEqual(await attempt(TAG_A, false), { locked_until: null, failures: 1 }, "counting starts again");
+  assert.deepEqual(await attempt(TAG_A, true), { locked_until: null, failures: 0 });
+});
+
+test("admin_attempt: the fifth wrong PIN in a row locks admin for an hour, right PIN or not", async () => {
+  for (let i = 1; i <= 4; i++) await attempt(TAG_A, false);
+  const locked = await attempt(TAG_A, false);
+  assert.ok(locked.locked_until instanceof Date);
+  const hour = locked.locked_until.getTime() - Date.now();
+  assert.ok(hour > 59 * 60_000 && hour <= 60 * 60_000 + 5_000, `locked for ${hour} ms`);
+  assert.equal(locked.failures, 0);
+  const [row] = await guard();
+
+  // While locked, the right PIN is refused just like a wrong one, and
+  // neither touches the row: a guess learns nothing and extends nothing.
+  for (const ok of [true, false, true]) {
+    assert.deepEqual(await attempt(TAG_A, ok), { locked_until: locked.locked_until, failures: 0 }, String(ok));
+  }
+  assert.deepEqual(await guard(), [row]);
+
+  // Re-running the schema keeps the lock.
+  await db.exec(SCHEMA);
+  assert.deepEqual(await guard(), [row]);
+  assert.deepEqual(await attempt(TAG_A, true), { locked_until: locked.locked_until, failures: 0 });
+});
+
+test("admin_attempt: once the hour is up, the count starts from nothing", async () => {
+  await db.exec("update public.admin_guard set locked_until = now() - interval '1 second'");
+  assert.deepEqual(await attempt(TAG_A, false), { locked_until: null, failures: 1 });
+  assert.deepEqual(await guard(), [{ tag: TAG_A, failures: 1, locked_until: null }]);
+  assert.deepEqual(await attempt(TAG_A, true), { locked_until: null, failures: 0 });
+});
+
+test("admin_attempt: a new ADMIN_PASSWORD (a new tag) is not locked, and the old one stays locked", async () => {
+  for (let i = 1; i <= 5; i++) await attempt(TAG_A, false);
+  const lockedA = await attempt(TAG_A, true);
+  assert.ok(lockedA.locked_until, "locked under the old password");
+  assert.deepEqual(await attempt(TAG_B, true), { locked_until: null, failures: 0 });
+  assert.deepEqual(await guard(TAG_B), [{ tag: TAG_B, failures: 0, locked_until: null }]);
+  // The old password's lock is untouched by the new one.
+  assert.deepEqual(await attempt(TAG_A, true), lockedA);
+  await db.exec(`update public.admin_guard set locked_until = null, failures = 0 where tag = '${TAG_A}'`);
+});
+
+test("admin_attempt: two passwords used in turn never reset each other's count", async () => {
+  // An old deployment with the old PIN beside the new one: 4 wrong on each,
+  // in turn, must still lock both on their fifth.
+  for (let i = 1; i <= 4; i++) {
+    assert.deepEqual(await attempt(TAG_A, false), { locked_until: null, failures: i });
+    assert.deepEqual(await attempt(TAG_B, false), { locked_until: null, failures: i });
+  }
+  assert.ok((await attempt(TAG_A, false)).locked_until, "A locks on its fifth");
+  assert.ok((await attempt(TAG_B, false)).locked_until, "B locks on its fifth");
+  await db.exec("update public.admin_guard set locked_until = null, failures = 0");
+});
+
+test("admin_attempt makes a password's row if it is missing, one per password, and refuses no tag", async () => {
+  await db.exec("delete from public.admin_guard");
+  assert.deepEqual(await attempt(TAG_A, false), { locked_until: null, failures: 1 });
+  await assert.rejects(db.exec(`insert into public.admin_guard (tag) values ('${TAG_A}')`), /duplicate key/);
+  assert.equal((await guard()).length, 1);
+  await assert.rejects(asServer({ sql: ATTEMPT, params: [null, true] }), /needs a tag/);
+  await assert.rejects(asServer({ sql: ATTEMPT, params: ["", true] }), /needs a tag/);
+  await attempt(TAG_A, true);
+});
+
+test("a browser can neither read the admin lockout nor run it", async () => {
+  for (const userId of [VISITOR, null]) {
+    await assert.rejects(as(userId, "select * from public.admin_guard"), /permission denied/);
+    await assert.rejects(as(userId, "update public.admin_guard set locked_until = null, failures = 0"), /permission denied/);
+    await assert.rejects(as(userId, "delete from public.admin_guard"), /permission denied/);
+    await assert.rejects(
+      as(userId, `select * from public.admin_attempt('${TAG_A}', true, 5, '1 hour')`),
+      /permission denied/
+    );
+  }
+  const fn = "public.admin_attempt(text, boolean, int, interval)";
+  const { rows } = await db.query(
+    `select has_function_privilege('anon', '${fn}', 'execute') as anon,
+            has_function_privilege('authenticated', '${fn}', 'execute') as authenticated,
+            has_function_privilege('service_role', '${fn}', 'execute') as server`
+  );
+  assert.deepEqual(rows, [{ anon: false, authenticated: false, server: true }]);
+  assert.deepEqual(await guard(), [{ tag: TAG_A, failures: 0, locked_until: null }]);
+});
+
 test("every table has row-level security on", async () => {
   const { rows } = await db.query(
     "select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity"

@@ -4,10 +4,30 @@ Newest entry first. Write one when you wrap up a session, before you switch
 machines. Keep the four headings.
 
 ---
-## 2026-10-17 (Claude Code, Mac): Distance to stop-out; highlights cut to the green closable flag (18 Oct)
+## 2026-10-17 (Claude Code, Mac): Distance to stop-out; highlights cut to the green closable flag (18 Oct); admin PIN with a lockout (19 Oct)
 
 ### What changed
 
+- (19 Oct) `ADMIN_PASSWORD` can be a 4-digit PIN, by the owner's choice
+  (`MIN_PASSWORD_LENGTH` is 4; shorter or missing still switches admin
+  off). Because the Admin link is on every page, the PIN is guarded by a
+  global lockout in the database: `schema.sql` section 7 adds the one-row
+  `admin_guard` table and `admin_attempt(p_tag, p_ok, p_max, p_lock)`
+  (service role only; later sections renumbered 8 to 10). After 5 wrong
+  tries in a row, from anyone, every attempt is refused for 1 hour, the
+  right PIN included, and the count is left alone while locked; a right
+  PIN when not locked resets it. The row stores a tag of the current
+  password, an HMAC keyed by `SUPABASE_SERVICE_ROLE_KEY` (`adminTag()` in
+  `src/lib/adminAuth.js`); a different tag starts afresh, so changing
+  `ADMIN_PASSWORD` in Vercel and redeploying unlocks admin at once. The
+  admin cookie's HMAC is now keyed by the pepper and the password
+  together (same format and 30-day life), so a stolen cookie cannot be
+  used to try PINs offline. The sign-in action decides in
+  `src/lib/adminGuard.js` (`checkAdminAttempt()`, tested with a fake rpc):
+  locked says the London time it unlocks; wrong keeps the 1-second pause
+  and says how many tries are left; a failed database call refuses with
+  "Admin sign-in is unavailable right now" (fail closed). The form's
+  label is "Admin PIN" with a numeric keypad.
 - (18 Oct) Eight demo accounts instead of one, for more of an overview:
   `supabase/demo-account.sql` now (re)creates d001 to d008 (all `DEMO ·`,
   account numbers 90000001 to 90000007): "Test account · 50k" kept as it
@@ -94,6 +114,13 @@ the week still up.
 
 ### Watch out
 
+- (19 Oct) Apply `supabase/schema.sql` before the admin PIN code deploys:
+  until `admin_attempt` exists, every sign-in is refused as unavailable.
+  The deploy signs every browser out of admin once (the cookie key
+  changed), and so will rotating `SUPABASE_SERVICE_ROLE_KEY`, which also
+  clears the lock. A bot can keep admin locked by sending five wrong tries each hour;
+  changing the PIN is the way back in. Local `npm run dev` shares the
+  lockout with the live site (one database).
 - Since 18 Oct nothing on the site says an account is near stop-out,
   offline or unchecked: read the figures. Until a terminal runs EA
   2026.10.17.5 its Margin and stop-out section has no distances (it says
@@ -110,6 +137,10 @@ the week still up.
 
 ### Still needs a human
 
+- (19 Oct) Run `supabase/schema.sql` on the live database, then set
+  `ADMIN_PASSWORD` in Vercel to the 4-digit PIN (Sensitive) and redeploy.
+  `npm run build` was not run for this change, and the sign-in was not
+  tried against the live database.
 - Compile EA 2026.10.17.5 in MetaEditor (not compiled here) and attach it
   to every terminal.
 - (18 Oct) Run the new `supabase/demo-account.sql` on the live database

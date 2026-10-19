@@ -31,9 +31,9 @@ Steps (skip any that are already done, and tell me which):
    - NEXT_PUBLIC_SUPABASE_URL = https://avsfygkauoipytiqraau.supabase.co
    - APP_URL = https://keystone-monitor.vercel.app
    - SUPABASE_SERVICE_ROLE_KEY = leave the value empty for me to paste the secret key from step 1b; Sensitive
-   - ADMIN_PASSWORD = leave the value empty for me to type a long, random password of at least 12 characters; Sensitive
+   - ADMIN_PASSWORD = leave the value empty for me to type the admin PIN (4 digits is enough: five wrong tries lock /admin for an hour, and changing ADMIN_PASSWORD then redeploying unlocks it); Sensitive
    Wait until I say both are filled in, then deploy. When it finishes, note the production address (Settings > Domains). If it is not keystone-monitor.vercel.app, set APP_URL to the real address and redeploy.
 
-3. Open the production address. It should show the "Overview" page straight away, with no sign-in. Then open /admin: it should ask for the admin password. Report the address and what each showed.
+3. Open the production address. It should show the "Overview" page straight away, with no sign-in. Then open /admin: it should ask for the admin PIN. Report the address and what each showed.
 
 Stop and ask me if any page looks different from these steps, asks for payment, or asks to delete or pause anything.

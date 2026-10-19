@@ -83,8 +83,10 @@ export function accountAttention({ row, baskets }) {
 
 // The panel on the overview and project pages: every account with a
 // closable basket, by label. rows each carry { id, label, currency,
-// last_sync_at } and their accountAttention result as attention; only the
-// closable reason is ever listed.
+// last_sync_at }, their accountAttention result as attention and their
+// accountBaskets result as baskets; only the closable reason is ever
+// listed. weekRealised and baskets (the closable ones, deepest loss first)
+// are the figures the panel lays out as a table.
 export function attentionItems(rows) {
   const items = [];
   for (const r of Array.isArray(rows) ? rows : []) {
@@ -95,6 +97,8 @@ export function attentionItems(rows) {
       label: r.label,
       currency: r.currency || "USD",
       lastSyncAt: r.last_sync_at ?? null,
+      weekRealised: num(r.baskets?.weekRealised),
+      baskets: Array.isArray(r.baskets?.closable) ? r.baskets.closable : [],
       reasons,
     });
   }

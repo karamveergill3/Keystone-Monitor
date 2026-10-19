@@ -214,8 +214,12 @@ and fill in:
   (`vercel env pull` cannot fetch it: Vercel returns `[SENSITIVE]` for
   variables stored as Sensitive.)
 - `APP_URL=http://localhost:3000`
-- `ADMIN_PASSWORD`: any password of 12 or more characters, for `/admin` on
-  your own machine. It does not have to match the one in Vercel.
+- `ADMIN_PASSWORD`: any password of 4 or more characters (a 4-digit PIN
+  will do), for `/admin` on your own machine. It does not have to match
+  the one in Vercel. The lockout (five wrong tries lock admin for an
+  hour) lives in the one database, counted per PIN: a local PIN of your
+  own has its own count and never touches the live site's, while the same
+  PIN shares the live site's count and lock.
 
 Then `npm run dev` and open http://localhost:3000.
 

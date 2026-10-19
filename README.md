@@ -105,10 +105,20 @@ Anyone with the link       --->                                       account_po
   server reads with the service role, and the database refuses the browser
   roles outright, so nobody can query it directly or see more than the
   pages show. The site asks search engines not to list it.
-- **One admin password.** `/admin` asks for `ADMIN_PASSWORD`, set in
-  Vercel, at least 12 characters. There are no admin accounts. Every write
-  goes through the service role after that check, or after `/api/sync`'s
-  key check.
+- **One admin PIN.** `/admin` asks for `ADMIN_PASSWORD`, set in Vercel, at
+  least 4 characters: a 4-digit PIN will do. There are no admin accounts.
+  Every write goes through the service role after that check, or after
+  `/api/sync`'s key check.
+- **Five wrong tries lock admin for an hour.** The count is kept in the
+  database (`admin_guard`, section 7 of `schema.sql`), per PIN, for
+  everyone at once. While locked, every attempt is refused, the right PIN
+  included, and the form says when it unlocks. Changing `ADMIN_PASSWORD`
+  in Vercel and redeploying unlocks it at once (the new PIN starts with no
+  count). An older deployment keeps its old PIN, so leave Vercel's
+  Deployment Protection on for deployment URLs other than the site's own. The admin cookie and the stored tag
+  are keyed by `SUPABASE_SERVICE_ROLE_KEY` as well as the PIN, so neither
+  can be used to try PINs offline; changing either signs every browser
+  out. If the database cannot be asked, nobody signs in.
 
 ## What the figures mean
 
@@ -164,15 +174,20 @@ Supabase Auth is not used, so nothing under Authentication needs setting.
    key (in `SUPABASE_SERVICE_ROLE_KEY`; Project Settings, API Keys,
    "Publishable and secret API keys"; the legacy `service_role` key also
    works until Supabase retires it at the end of 2026), `APP_URL` and
-   `ADMIN_PASSWORD`. Mark the secret key and `ADMIN_PASSWORD` Sensitive, and
-   make the password long and random: it is the only thing guarding
-   `/admin`.
+   `ADMIN_PASSWORD`. Mark the secret key and `ADMIN_PASSWORD` Sensitive.
+   `ADMIN_PASSWORD` can be a 4-digit PIN: five wrong tries lock `/admin`
+   for an hour.
 3. Deploy, and add your domain if you have one.
 
 ### 3. The admin screen
 
-Open `/admin` and enter `ADMIN_PASSWORD`. To change the password, change it
-in Vercel and redeploy; every browser is signed out of admin.
+Open `/admin` and enter `ADMIN_PASSWORD` (the admin PIN). To change it,
+change it in Vercel and redeploy; every browser is signed out of admin.
+After five wrong tries in a row, from anyone, admin is locked for an hour
+and refuses even the right PIN. To get back in sooner, change
+`ADMIN_PASSWORD` in Vercel and redeploy: a new PIN starts with no lock
+and no count. Sign-in needs the schema's `admin_attempt`, so apply
+`schema.sql` before deploying the code that uses it.
 
 ### 4. Adding an account
 
@@ -246,7 +261,7 @@ React 19, Tailwind CSS 4, Supabase, Recharts, pdfkit.
 | `src/app/api/sync/route.js` | The EA's endpoint. Logic in `src/lib/syncIngest.js`. |
 | `src/lib/accountStats.js` | Every figure, for screens and PDFs alike. |
 | `src/lib/db.js` | The server's database client, for every page and report. |
-| `src/lib/access.js` | The admin password check (`src/lib/adminAuth.js`). |
+| `src/lib/access.js` | The admin PIN check (`src/lib/adminAuth.js`); the sign-in lockout is `src/lib/adminGuard.js`. |
 | `src/app/(app)/admin/actions.js` | Every write the admin screen makes. |
 | `src/lib/reportPdf.js` | The PDF reports. |
 | `public/ea/KeystoneSync.mq5` | The read-only MT5 EA. |

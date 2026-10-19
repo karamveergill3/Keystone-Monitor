@@ -169,9 +169,10 @@ test("attention items: only accounts with a closable basket, by label", () => {
     null,
   ]);
   assert.deepEqual(items.map((i) => i.label), ["Able", "Bravo", "Charlie", "Zulu"]);
-  assert.deepEqual(items[0], { accountId: "7", label: "Able", currency: "USD", lastSyncAt: SYNC, reasons: green.reasons });
-  assert.deepEqual(items[2], { accountId: "9", label: "Charlie", currency: "USD", lastSyncAt: null, reasons: [mixed.reasons[1]] });
-  assert.deepEqual(items[3], { accountId: "8", label: "Zulu", currency: "EUR", lastSyncAt: null, reasons: green.reasons });
+  const bare = { weekRealised: null, baskets: [] };
+  assert.deepEqual(items[0], { accountId: "7", label: "Able", currency: "USD", lastSyncAt: SYNC, ...bare, reasons: green.reasons });
+  assert.deepEqual(items[2], { accountId: "9", label: "Charlie", currency: "USD", lastSyncAt: null, ...bare, reasons: [mixed.reasons[1]] });
+  assert.deepEqual(items[3], { accountId: "8", label: "Zulu", currency: "EUR", lastSyncAt: null, ...bare, reasons: green.reasons });
   assert.deepEqual(attentionItems(null), []);
   assert.deepEqual(attentionItems([{ id: "1", label: "A", attention: stray }]), []);
 });
@@ -187,4 +188,14 @@ test("attention items from real accounts: archived, offline and never-synced one
     attention: accountAttention({ row: r, baskets: r.id === "1" || r.id === "2" ? closableBaskets() : undefined }),
   }));
   assert.deepEqual(attentionItems(rows).map((i) => i.label), ["Offline closable"]);
+});
+
+test("attention items carry the week and the closable baskets for the panel's table", () => {
+  const baskets = closableBaskets();
+  const r = row({ id: "1", label: "Grid" });
+  const [item] = attentionItems([{ ...r, baskets, attention: accountAttention({ row: r, baskets }) }]);
+  assert.equal(item.weekRealised, baskets.weekRealised);
+  assert.deepEqual(item.baskets, baskets.closable);
+  assert.ok(item.baskets.length > 0);
+  assert.ok(item.baskets.every((b) => b.closable && b.leftover > 0));
 });

@@ -8,7 +8,7 @@ import { ADMIN_COOKIE, adminTokenValid } from "@/lib/adminAuth";
 
 export async function isAdmin() {
   const token = (await cookies()).get(ADMIN_COOKIE)?.value;
-  return adminTokenValid(token, process.env.ADMIN_PASSWORD);
+  return adminTokenValid(token, process.env.ADMIN_PASSWORD, process.env.SUPABASE_SERVICE_ROLE_KEY);
 }
 
 // For the admin page and every admin server action. A server action is a

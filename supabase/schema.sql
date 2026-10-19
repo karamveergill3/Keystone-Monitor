@@ -13,9 +13,11 @@
 --   * Every write goes through the service role too: /api/sync after it
 --     has checked the terminal's key, and the admin screen's actions after
 --     they have checked the admin password. The functions that write
---     (sync_open_positions, track_baskets) can be run by the service role
---     only (section 8).
+--     (sync_open_positions, track_baskets, admin_attempt) can be run by
+--     the service role only (section 9).
 --   * Sync keys are stored only as SHA-256 hashes, in their own table.
+--   * The admin sign-in's lockout lives here (section 7), so guesses at a
+--     short ADMIN_PASSWORD are counted for everyone at once.
 --
 -- ROLLOUT: apply this file before deploying the code that goes with it.
 -- The pages read what it adds, and the code still running keeps working
@@ -299,7 +301,7 @@ create index if not exists baskets_account_closed_idx
 -- Safe to repeat: the EA resends a sync whose reply it never got, and the
 -- same p_at and snapshot leave the same rows. It locks the account's row,
 -- which sync_open_positions already holds; the lock only matters if this
--- is ever run on its own. Service role only (see section 8). If the
+-- is ever run on its own. Service role only (see section 9). If the
 -- arguments ever change, drop this signature first: "create or replace"
 -- would add a second function beside it rather than replace it.
 create or replace function public.track_baskets(p_account uuid, p_at timestamptz, p_balance numeric, p_complete boolean)
@@ -395,7 +397,7 @@ $$;
 -- derived data that the next good sync puts right, and a failure there
 -- must never stop the account syncing.
 --
--- Service role only (see section 8). If the arguments ever change, drop
+-- Service role only (see section 9). If the arguments ever change, drop
 -- this signature first, as with track_baskets.
 create or replace function public.sync_open_positions(
   p_account uuid, p_rows jsonb, p_at timestamptz, p_balance numeric, p_complete boolean)
@@ -437,7 +439,82 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- 7. Views. security_invoker, so the RLS above applies to whoever reads them.
+-- 7. Admin lockout: the guard on the admin sign-in form.
+--
+-- ADMIN_PASSWORD may be a 4-digit PIN, so wrong guesses are counted here,
+-- from anyone, anywhere: after p_max wrong tries in a row, every attempt
+-- is refused for p_lock, the right PIN included, so a guess made during the
+-- lock reveals nothing. A right PIN while not locked resets the count.
+--
+-- One row per password. tag identifies an ADMIN_PASSWORD without
+-- revealing it: an HMAC of it keyed by a secret only the server has
+-- (src/lib/adminAuth.js adminTag), never the PIN or its plain hash. A new
+-- password in Vercel gets a row of its own, with no lock and no count:
+-- that is the owner's way back in when a bot has locked admin. Each row
+-- keeps its own count, so an old deployment still running the old PIN, or
+-- a local copy with another one, can never reset the current one's.
+-- ---------------------------------------------------------------------------
+create table if not exists public.admin_guard (
+  tag          text primary key,
+  failures     int not null default 0,
+  locked_until timestamptz
+);
+
+alter table public.admin_guard enable row level security;
+
+-- No policies (see projects above).
+
+-- What the sign-in action calls on every attempt, with p_ok saying whether
+-- the PIN was right (checked on the server, timing-safe). Returns
+--   locked_until  set: admin is locked until then; refuse.
+--                 null: let in when p_ok, otherwise one more wrong try.
+--   failures      wrong tries in a row so far (0 once a lock starts).
+-- The row is locked first, so attempts made at the same moment take turns
+-- and each is counted. Service role only (see section 9). If the
+-- arguments ever change, drop this signature first, as with track_baskets.
+create or replace function public.admin_attempt(
+  p_tag text, p_ok boolean, p_max int, p_lock interval,
+  out locked_until timestamptz, out failures int)
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_failures int;
+  v_until    timestamptz;
+begin
+  if p_tag is null or p_tag = '' then
+    raise exception 'admin_attempt needs a tag';
+  end if;
+  insert into public.admin_guard (tag) values (p_tag) on conflict (tag) do nothing;
+  select g.failures, g.locked_until into v_failures, v_until
+    from public.admin_guard g where g.tag = p_tag for update;
+
+  if v_until > now() then
+    -- Locked: refused whatever p_ok says, and the count is left alone.
+    null;
+  elsif p_ok then
+    v_failures := 0;
+    v_until := null;
+  else
+    v_failures := v_failures + 1;
+    v_until := null;
+    if v_failures >= greatest(coalesce(p_max, 1), 1) then
+      v_until := now() + p_lock;
+      v_failures := 0;
+    end if;
+  end if;
+
+  update public.admin_guard g
+     set failures = v_failures, locked_until = v_until
+   where g.tag = p_tag;
+
+  locked_until := case when v_until > now() then v_until end;
+  failures := v_failures;
+end;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 8. Views. security_invoker, so the RLS above applies to whoever reads them.
 --
 -- Days are London days. Keep LONDON in src/lib/days.js in step if this ever
 -- changes.
@@ -602,11 +679,12 @@ left join lateral (
 ) r on true;
 
 -- ---------------------------------------------------------------------------
--- 8. The browser roles get nothing. Only the server's service role reads.
+-- 9. The browser roles get nothing. Only the server's service role reads.
 -- ---------------------------------------------------------------------------
 revoke all on public.projects, public.accounts, public.account_keys,
   public.deals, public.equity_samples, public.open_positions, public.baskets,
-  public.account_daily, public.account_positions, public.basket_results
+  public.account_daily, public.account_positions, public.basket_results,
+  public.admin_guard
   from anon, authenticated;
 
 -- Postgres lets everyone run a new function, and Supabase grants the
@@ -618,9 +696,12 @@ grant execute on function public.track_baskets(uuid, timestamptz, numeric, boole
 revoke all on function public.sync_open_positions(uuid, jsonb, timestamptz, numeric, boolean)
   from public, anon, authenticated;
 grant execute on function public.sync_open_positions(uuid, jsonb, timestamptz, numeric, boolean) to service_role;
+revoke all on function public.admin_attempt(text, boolean, int, interval)
+  from public, anon, authenticated;
+grant execute on function public.admin_attempt(text, boolean, int, interval) to service_role;
 
 -- ---------------------------------------------------------------------------
--- 9. Leftovers. A fresh database never has them; a re-run removes them from
+-- 10. Leftovers. A fresh database never has them; a re-run removes them from
 -- an older one.
 -- ---------------------------------------------------------------------------
 

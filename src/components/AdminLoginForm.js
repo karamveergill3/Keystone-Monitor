@@ -10,8 +10,8 @@ export default function AdminLoginForm() {
     <form action={action} className="space-y-4">
       <h1 className="text-lg font-semibold">Admin</h1>
       <div>
-        <label htmlFor="password" className={labelClass}>Admin password</label>
-        <input id="password" name="password" type="password" autoComplete="current-password" required className={inputClass} />
+        <label htmlFor="password" className={labelClass}>Admin PIN</label>
+        <input id="password" name="password" type="password" inputMode="numeric" autoComplete="current-password" required className={inputClass} />
       </div>
       {state && !state.ok && <p className="text-sm text-down">{state.message}</p>}
       <button type="submit" disabled={pending} className={`${buttonClass} w-full`}>
