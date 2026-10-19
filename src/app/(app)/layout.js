@@ -6,8 +6,8 @@ import { listProjects } from "@/lib/data";
 import { db } from "@/lib/db";
 import { APP_NAME } from "@/lib/site";
 
-// Open to anyone with the link. The Admin link shows only once the admin
-// password has been entered in this browser; /admin itself asks for it.
+// Open to anyone with the link. The Admin link is always there; /admin
+// asks for the admin password unless this browser has already given it.
 export default async function AppLayout({ children }) {
   const supabase = await db();
   const [projects, admin] = await Promise.all([listProjects(supabase), isAdmin()]);
@@ -25,7 +25,7 @@ export default async function AppLayout({ children }) {
             {projects.map((p) => (
               <Link key={p.id} href={`/projects/${p.slug}`} className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">{p.name}</Link>
             ))}
-            {admin && <Link href="/admin" className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">Admin</Link>}
+            <Link href="/admin" className="rounded-md px-2.5 py-1.5 hover:bg-panel-2 hover:text-accent">Admin</Link>
           </nav>
           {admin && (
             <form action={adminSignOut} className="ml-auto text-xs text-muted">
