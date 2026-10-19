@@ -7,9 +7,9 @@ import { money, pct, ago, number } from "@/lib/format";
 // The Baskets cell, from the row's accountBaskets result (src/lib/baskets.js)
 // when the page passed one. A dash when there is nothing to group yet: no
 // sync, or no list of positions from the last one. Stacked, so the column
-// is as narrow as its widest figure: how many are open, the deepest one's
-// floating, and, when any could be closed now with the week still in
-// profit, how many, beside a tick, linking to the account's baskets.
+// is as narrow as its widest figure: how many are open and, when any could
+// be closed now with the week still in profit, how many, beside a tick,
+// linking to the account's baskets.
 function BasketsCell({ r }) {
   const b = r.baskets;
   if (!b || !["current", "none"].includes(b.state)) {
@@ -18,7 +18,6 @@ function BasketsCell({ r }) {
   if (b.open === 0) {
     return <td className="px-3 py-2.5 text-center text-xs text-muted">None</td>;
   }
-  const deepest = b.deepest;
   const closable = Array.isArray(b.closable) ? b.closable : [];
   const k = closable.length;
   // Each judged on its own, so each says what the week keeps after it alone.
@@ -28,12 +27,9 @@ function BasketsCell({ r }) {
   return (
     <td
       className="px-3 py-2.5 text-center"
-      title={`${number(b.open, 0)} open ${b.open === 1 ? "basket" : "baskets"}; deepest ${deepest.symbol} ${deepest.side} at ${money(deepest.floating, r.currency, { sign: true })}`}
+      title={`${number(b.open, 0)} open ${b.open === 1 ? "basket" : "baskets"}`}
     >
       <span className="num block whitespace-nowrap">{number(b.open, 0)} open</span>
-      <span className="block whitespace-nowrap">
-        <Pnl value={deepest.floating} currency={r.currency} />
-      </span>
       {k > 0 && (
         <Link
           href={`/accounts/${r.id}#baskets`}
@@ -99,7 +95,7 @@ export default function AccountsTable({ rows }) {
             <th className="px-3 py-2.5 text-center font-medium">Balance</th>
             <th className="px-3 py-2.5 text-center font-medium">Equity</th>
             <th className="px-3 py-2.5 text-center font-medium" title="Equity below balance right now">Floating DD</th>
-            <th className="px-3 py-2.5 text-center font-medium" title="Open baskets (one symbol, one direction), the deepest one's floating P&L, and how many could be closed now with this week's realised profit still above zero">
+            <th className="px-3 py-2.5 text-center font-medium" title="Open baskets (one symbol, one direction), and how many could be closed now with this week's realised profit still above zero">
               Baskets
             </th>
             <th className="px-3 py-2.5 text-center font-medium" title="Largest fall in equity since tracking began">Max DD</th>
